@@ -28,17 +28,21 @@ else
 fi
 
 echo "==> Appending AGENTS.md..."
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-if [ -f "$SCRIPT_DIR/AGENTS.md" ]; then
-  mkdir -p "$HOME/.pi/agent"
-  touch "$HOME/.pi/agent/AGENTS.md"
-  if ! grep -qF "$(head -n 1 "$SCRIPT_DIR/AGENTS.md")" "$HOME/.pi/agent/AGENTS.md" 2>/dev/null; then
-    cat "$SCRIPT_DIR/AGENTS.md" >> "$HOME/.pi/agent/AGENTS.md"
+AGENTS_URL="https://raw.githubusercontent.com/hidayatullahap/code-setup/refs/heads/main/AGENTS.md"
+mkdir -p "$HOME/.pi/agent"
+touch "$HOME/.pi/agent/AGENTS.md"
+TMP_AGENTS="$(mktemp)"
+if curl -fsSL "$AGENTS_URL" -o "$TMP_AGENTS"; then
+  if ! grep -qF "$(head -n 1 "$TMP_AGENTS")" "$HOME/.pi/agent/AGENTS.md" 2>/dev/null; then
+    cat "$TMP_AGENTS" >> "$HOME/.pi/agent/AGENTS.md"
     echo "Appended AGENTS.md to \$HOME/.pi/agent/AGENTS.md"
   else
     echo "AGENTS.md already appended, skipping"
   fi
+else
+  echo "Failed to fetch AGENTS.md from $AGENTS_URL" >&2
 fi
+rm -f "$TMP_AGENTS"
 
 echo "==> Done. Installed packages:"
 pi list
