@@ -12,6 +12,7 @@ pi install npm:@juicesharp/rpiv-ask-user-question
 pi install npm:@narumitw/pi-btw
 pi install npm:@narumitw/pi-plan-mode
 pi install npm:vision-handoff
+pi install npm:@syzom/nopus
 
 echo "==> Configuring vision handoff..."
 mkdir -p "$HOME/.pi/agent"
