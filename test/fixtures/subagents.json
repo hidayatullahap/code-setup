@@ -1,0 +1,24 @@
+{
+    "subagents": {
+        "agentOverrides": {
+            "delegate": {
+                "model": "opencode-go/muse-spark-1.2-contributor"
+            },
+            "oracle": {
+                "model": "opencode-go/deepseek-v4-pro"
+            },
+            "researcher": {
+                "model": "opencode-go/deepseek-v4-pro"
+            },
+            "reviewer": {
+                "model": "opencode-go/deepseek-v4-flash"
+            },
+            "scout": {
+                "model": "opencode-go/muse-spark-1.2-contributor"
+            },
+            "worker": {
+                "model": "opencode-go/deepseek-v4-flash"
+            }
+        }
+    }
+}
