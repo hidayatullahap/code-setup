@@ -13,8 +13,9 @@ setup() {
   export ORIG_PATH="$PATH"
   export PATH="$FAKE_BIN:$PATH"
 
-  export FIXTURE_AGENTS="/f/dev/etc/setup/test/fixtures/AGENTS.md"
-  export FIXTURE_SUBAGENTS="/f/dev/etc/setup/test/fixtures/subagents.json"
+  export PROJECT_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
+  export FIXTURE_AGENTS="$PROJECT_ROOT/test/fixtures/AGENTS.md"
+  export FIXTURE_SUBAGENTS="$PROJECT_ROOT/test/fixtures/subagents.json"
   export FAKE_LOG="$TEST_TMP/fake.log"
 
   # default stubs – npm and pi are always faked
@@ -96,7 +97,7 @@ teardown() {
 
 # helper to run setup.sh and capture output
 run_setup() {
-  run bash /f/dev/etc/setup/setup.sh
+  run bash "$PROJECT_ROOT/setup.sh"
 }
 
 @test "fresh install creates vision.json, AGENTS.md and settings.json" {
@@ -119,7 +120,7 @@ run_setup() {
   marker_before=$(grep -c "code-setup AGENTS.md" "$HOME/.pi/agent/AGENTS.md" || true)
   [ "$marker_before" -eq 1 ]
 
-  run bash /f/dev/etc/setup/setup.sh
+  run bash "$PROJECT_ROOT/setup.sh"
   [ "$status" -eq 0 ]
   count_after=$(grep -c "Test fixture AGENTS line" "$HOME/.pi/agent/AGENTS.md" || true)
   [ "$count_after" -eq 1 ]
@@ -182,8 +183,8 @@ EOF
   export CURL_SCENARIO="fail"
   # create a temporary script dir with subagents.json
   TMP_SCRIPT_DIR="$(mktemp -d)"
-  cp /f/dev/etc/setup/test/fixtures/subagents.json "$TMP_SCRIPT_DIR/subagents.json"
-  cp /f/dev/etc/setup/setup.sh "$TMP_SCRIPT_DIR/setup.sh"
+  cp "$PROJECT_ROOT/test/fixtures/subagents.json" "$TMP_SCRIPT_DIR/subagents.json"
+  cp "$PROJECT_ROOT/setup.sh" "$TMP_SCRIPT_DIR/setup.sh"
   # run the copy so BASH_SOURCE points there
   run bash "$TMP_SCRIPT_DIR/setup.sh"
   [ "$status" -eq 0 ]
@@ -233,7 +234,7 @@ EOF
   export PATH="$TEST_TMP/nojq-bin:$FAKE_BIN"
   # ensure jq not found
   ! command -v jq >/dev/null 2>&1
-  run bash /f/dev/etc/setup/setup.sh
+  run bash "$PROJECT_ROOT/setup.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"jq is required"* ]]
   # settings preserved, not reset to {}
