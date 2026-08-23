@@ -5,14 +5,12 @@ echo "==> Installing pi..."
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
 echo "==> Installing pi packages..."
-pi install git:github.com/DietrichGebert/ponytail
-pi install npm:pi-interactive-shell
+pi install npm:pi-web-access
 pi install npm:pi-subagents
 pi install npm:@juicesharp/rpiv-ask-user-question
 pi install npm:@narumitw/pi-btw
 pi install npm:@narumitw/pi-plan-mode
 pi install npm:vision-handoff
-pi install npm:@syzom/nopus
 
 echo "==> Configuring vision handoff..."
 mkdir -p "$HOME/.pi/agent"
