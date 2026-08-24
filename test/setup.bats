@@ -352,3 +352,15 @@ EOS
   grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
   ! grep -q "old version" "$HOME/.pi/agent/extensions/chat-only.ts"
 }
+
+@test "chat-only extension defaults to tools enabled (/tools default, /chat manual)" {
+  run_setup
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  # new sessions default to tools – chatModeEnabled must be false
+  grep -q "let chatModeEnabled = false" "$HOME/.pi/agent/extensions/chat-only.ts"
+  grep -q "Starts every session with tools enabled" "$HOME/.pi/agent/extensions/chat-only.ts"
+  grep -q "Every new session defaults to tools enabled" "$HOME/.pi/agent/extensions/chat-only.ts"
+  # chat-only is opt-in via /chat, not default
+  ! grep -q "Every new session defaults to chat-only" "$HOME/.pi/agent/extensions/chat-only.ts"
+}

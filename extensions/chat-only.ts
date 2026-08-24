@@ -1,12 +1,13 @@
 /**
  * Chat-Only Extension – Lazy Tool Loading
  *
- * Starts every session in pure chat-only mode: zero active tools, tiny
- * system prompt, no Available tools / Guidelines context. Tools load only
- * when the user runs /tools or confirms an auto-detected intent.
+ * Starts every session with tools enabled (/tools default). Chat-only
+ * mode is opt-in via /chat: zero active tools, tiny system prompt, no
+ * Available tools / Guidelines context. Tools load by default; /chat
+ * disables them, /tools restores them.
  *
- * Default is chat-only per session. /chat returns to chat-only, /tools
- * restores the previous tool set.
+ * Default is tools-enabled per session. /chat enters chat-only,
+ * /tools restores the previous tool set.
  *
  * Place as:
  *   ~/.pi/agent/extensions/chat-only.ts  (global)
@@ -17,7 +18,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 
 const CHAT_STATE_CUSTOM_TYPE = "chat-only-state";
 
-// Tiny prompt used when in chat-only mode. ~10 lines, no tool descriptions.
+// Tiny prompt used when in chat-only mode (entered manually via /chat). ~10 lines, no tool descriptions.
 const TINY_CHAT_PROMPT = `You are pi, a helpful chat assistant.
 
 You are currently in CHAT-ONLY mode. You have NO tools available – no file access, no shell, no edits.
@@ -47,7 +48,7 @@ interface ChatOnlyState {
 }
 
 export default function chatOnlyExtension(pi: ExtensionAPI) {
-  let chatModeEnabled = true;
+  let chatModeEnabled = false;
   let toolsBeforeChat: string[] | undefined;
 
   function validToolNames(names: string[]): string[] {
@@ -155,10 +156,12 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
     const reason = (event as { reason?: string }).reason;
 
     if (reason === "startup" || reason === "new") {
-      // Every new session defaults to chat-only.
-      toolsBeforeChat = [...pi.getActiveTools()];
-      pi.setActiveTools([]);
-      chatModeEnabled = true;
+      // Every new session defaults to tools enabled.
+      chatModeEnabled = false;
+      if (pi.getActiveTools().length === 0) {
+        const all = validToolNames(pi.getAllTools().map((t) => t.name));
+        if (all.length > 0) pi.setActiveTools(all);
+      }
       persist();
       updateStatus(ctx);
       return;
@@ -167,14 +170,13 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
     // resume / reload / fork – try to restore persisted toggle.
     const restored = restoreFromBranch(ctx);
     if (!restored) {
-      // No prior state – default to chat-only for safety, but keep current tools as snapshot.
-      // Only do this if we haven't already persisted (e.g., first load of old session).
-      if (pi.getActiveTools().length > 0) {
-        toolsBeforeChat = [...pi.getActiveTools()];
-        pi.setActiveTools([]);
-        chatModeEnabled = true;
-        // Don't persist yet – wait for explicit toggle to avoid spamming old sessions.
+      // No prior state – default to tools enabled. Ensure tools are on.
+      chatModeEnabled = false;
+      if (pi.getActiveTools().length === 0) {
+        const all = validToolNames(pi.getAllTools().map((t) => t.name));
+        if (all.length > 0) pi.setActiveTools(all);
       }
+      // Don't persist yet – wait for explicit toggle to avoid spamming old sessions.
     }
     updateStatus(ctx);
   });
