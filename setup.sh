@@ -80,7 +80,7 @@ else
       cp -r "$CLONE_DIR/extensions/generate-design/." "$GD_DEST/" 2>/dev/null || cp -r "$CLONE_DIR/extensions/generate-design/"* "$GD_DEST/" 2>/dev/null || true
     fi
     if [ -d "$GD_DEST/skills" ]; then
-      echo "Installed generate-design extension to $GD_DEST/ ($(ls -1 "$GD_DEST/skills" 2>/dev/null | wc -l | tr -d ' ') skill(s), from clone)"
+      echo "Installed generate-design extension to $GD_DEST/ ($(find "$GD_DEST/skills" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ') skill(s), from clone)"
     else
       echo "Installed generate-design extension to $GD_DEST/ (from clone)" >&2
       echo "Warning: $GD_DEST/skills not found after copy — extension will use built-in fallbacks" >&2

@@ -77,7 +77,7 @@ if [ -d "$GD_SRC" ]; then
   fi
   # Verify critical files
   if [ -f "$GD_DEST/manifest.json" ] && [ -d "$GD_DEST/skills" ]; then
-    SKILL_COUNT="$(ls -1 "$GD_DEST/skills" 2>/dev/null | wc -l | tr -d ' ')"
+    SKILL_COUNT="$(find "$GD_DEST/skills" -mindepth 1 -maxdepth 1 2>/dev/null | wc -l | tr -d ' ')"
     echo "    Installed generate-design -> $GD_DEST/ ($SKILL_COUNT skill(s), manifest.json present)"
   elif [ -f "$GD_DEST/index.ts" ] || [ -f "$GD_DEST/manifest.json" ]; then
     echo "    Installed generate-design -> $GD_DEST/ (partial — check skills/ folder)"
