@@ -10,11 +10,9 @@
  * /tools restores the previous tool set.
  *
  * Place as:
- *   ~/.pi/agent/extensions/chat-only.ts  (global)
- *   .pi/extensions/chat-only.ts          (project-local)
+ *   ~/.pi/agent/extensions/chat-only/chat-only.js  (global)
+ *   .pi/extensions/chat-only/chat-only.js          (project-local)
  */
-
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const CHAT_STATE_CUSTOM_TYPE = "chat-only-state";
 
@@ -33,7 +31,7 @@ const TOOL_INTENT_RE =
   /\b(read|open|show|edit|write|create|update|modify|run|execute|bash|grep|search|find|ls|list files|cat|apply patch|check the repo|look at|see the file)\b/i;
 const FILE_PATH_RE = /(\.\/|\.\.\/|~\/|[a-z0-9_-]+\.(ts|js|tsx|jsx|json|md|py|rs|go|yaml|yml|toml|css|html)|\bpackage\.json\b|\bREADME\b)/i;
 
-function looksLikeToolIntent(text: string): boolean {
+function looksLikeToolIntent(text) {
   const trimmed = text.trim();
   if (!trimmed) return false;
   // Ignore slash commands – let command handlers run.
@@ -42,28 +40,23 @@ function looksLikeToolIntent(text: string): boolean {
   return TOOL_INTENT_RE.test(trimmed) || FILE_PATH_RE.test(trimmed);
 }
 
-interface ChatOnlyState {
-  enabled: boolean;
-  toolsBeforeChat?: string[];
-}
-
-export default function chatOnlyExtension(pi: ExtensionAPI) {
+export default function chatOnlyExtension(pi) {
   let chatModeEnabled = false;
-  let toolsBeforeChat: string[] | undefined;
+  let toolsBeforeChat;
 
-  function validToolNames(names: string[]): string[] {
+  function validToolNames(names) {
     const all = new Set(pi.getAllTools().map((t) => t.name));
     return names.filter((n) => all.has(n));
   }
 
   function persist() {
-    pi.appendEntry<ChatOnlyState>(CHAT_STATE_CUSTOM_TYPE, {
+    pi.appendEntry(CHAT_STATE_CUSTOM_TYPE, {
       enabled: chatModeEnabled,
       toolsBeforeChat,
     });
   }
 
-  function updateStatus(ctx: ExtensionContext) {
+  function updateStatus(ctx) {
     if (chatModeEnabled) {
       ctx.ui.setStatus("chat-only", ctx.ui.theme.fg("accent", "💬 chat"));
       ctx.ui.setWidget(
@@ -76,7 +69,7 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
     }
   }
 
-  function enableChatMode(ctx: ExtensionContext) {
+  function enableChatMode(ctx) {
     if (chatModeEnabled) {
       ctx.ui.notify("Already in chat-only mode. No tools loaded.", "info");
       return;
@@ -90,7 +83,7 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
     ctx.ui.notify("Chat-only mode enabled. Tools disabled for this session. Run /tools to re-enable.", "info");
   }
 
-  function disableChatMode(ctx: ExtensionContext) {
+  function disableChatMode(ctx) {
     if (!chatModeEnabled) {
       ctx.ui.notify("Tools already enabled.", "info");
       return;
@@ -107,13 +100,13 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
     ctx.ui.notify(`Tools enabled (${effective.length} tools). Chat-only off for this session. Run /chat to go back.`, "info");
   }
 
-  function restoreFromBranch(ctx: ExtensionContext): boolean {
+  function restoreFromBranch(ctx) {
     const branch = ctx.sessionManager.getBranch();
-    let last: ChatOnlyState | undefined;
+    let last;
     for (const entry of branch) {
-      const e = entry as { type?: string; customType?: string; data?: unknown };
+      const e = entry;
       if (e.type === "custom" && e.customType === CHAT_STATE_CUSTOM_TYPE) {
-        last = e.data as ChatOnlyState | undefined;
+        last = e.data;
       }
     }
     if (last) {
@@ -153,7 +146,7 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
   // ---- Lifecycle ----
 
   pi.on("session_start", async (event, ctx) => {
-    const reason = (event as { reason?: string }).reason;
+    const reason = event.reason;
 
     if (reason === "startup" || reason === "new") {
       // Every new session defaults to tools enabled.
@@ -215,19 +208,19 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
     if (!chatModeEnabled) return;
     // Strip historic tool artifacts when in chat-only – keep only user/assistant/custom text.
     const filtered = event.messages.filter((m) => {
-      const role = (m as { role?: string }).role;
+      const role = m.role;
       if (role === "toolResult") return false;
       // Assistant toolCall blocks are inside assistant messages; we keep the message
       // but could strip toolCall content if needed. For minimal cost, drop assistant
       // messages that are purely tool calls without text.
       if (role === "assistant") {
-        const content = (m as { content?: unknown }).content;
+        const content = m.content;
         if (Array.isArray(content)) {
           const hasText = content.some(
-            (b) => (b as { type?: string })?.type === "text" && ((b as { text?: string }).text ?? "").trim(),
+            (b) => b.type === "text" && (b.text ?? "").trim(),
           );
           const hasOnlyToolCalls =
-            content.length > 0 && content.every((b) => (b as { type?: string })?.type === "toolCall");
+            content.length > 0 && content.every((b) => b.type === "toolCall");
           if (hasOnlyToolCalls && !hasText) return false;
         }
       }
@@ -235,15 +228,15 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
     });
     // Also strip toolCalls from remaining assistant content arrays to avoid sending stale schemas.
     const cleaned = filtered.map((m) => {
-      if ((m as { role?: string }).role !== "assistant") return m;
-      const content = (m as { content?: unknown[] }).content;
+      if (m.role !== "assistant") return m;
+      const content = m.content;
       if (!Array.isArray(content)) return m;
-      const withoutToolCalls = content.filter((b) => (b as { type?: string })?.type !== "toolCall");
+      const withoutToolCalls = content.filter((b) => b.type !== "toolCall");
       if (withoutToolCalls.length === content.length) return m;
       // If we removed everything, drop the message (already filtered, but guard).
       if (withoutToolCalls.length === 0) return null;
-      return { ...(m as object), content: withoutToolCalls } as typeof m;
-    }).filter(Boolean) as typeof event.messages;
+      return { ...m, content: withoutToolCalls };
+    }).filter(Boolean);
 
     return { messages: cleaned };
   });
@@ -254,7 +247,7 @@ export default function chatOnlyExtension(pi: ExtensionAPI) {
     if (!ctx.hasUI) return { action: "continue" };
     if (ctx.mode !== "tui") return { action: "continue" };
     // Avoid interrupting mid-stream.
-    const streaming = (event as { streamingBehavior?: string }).streamingBehavior;
+    const streaming = event.streamingBehavior;
     if (streaming) return { action: "continue" };
 
     const text = event.text ?? "";

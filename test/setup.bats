@@ -1,7 +1,9 @@
 #!/usr/bin/env bats
 
 # Tests for setup.sh – run with: npx bats test/setup.bats
-# Each test gets an isolated HOME and faked PATH (curl, npm, pi).
+# Each test gets an isolated HOME and faked PATH (git, npm, pi).
+# setup.sh now clones to a temp dir (git clone --depth 1) and copies
+# from that clone. The git stub populates a fake clone dir from fixtures.
 
 setup() {
   export TEST_TMP="$(mktemp -d)"
@@ -16,7 +18,7 @@ setup() {
   export PROJECT_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   export FIXTURE_AGENTS="$PROJECT_ROOT/test/fixtures/AGENTS.md"
   export FIXTURE_SUBAGENTS="$PROJECT_ROOT/test/fixtures/subagents.json"
-  export FIXTURE_EXT="$PROJECT_ROOT/test/fixtures/chat-only.ts"
+  export FIXTURE_EXT="$PROJECT_ROOT/test/fixtures/chat-only/chat-only.js"
   export FAKE_LOG="$TEST_TMP/fake.log"
 
   # default stubs – npm and pi are always faked
@@ -35,80 +37,118 @@ exit 0
 EOS
   chmod +x "$FAKE_BIN/pi"
 
-  # curl stub – behaviour controlled by CURL_SCENARIO
-  cat > "$FAKE_BIN/curl" <<'EOS'
+  # git stub – simulates `git clone --depth 1 --branch main <url> <dest>`
+  cat > "$FAKE_BIN/git" <<'EOS'
 #!/usr/bin/env bash
 set -euo pipefail
-OUTPUT=""
-URL=""
-# parse -o <file> and URL
-args=("$@")
-for ((i=0;i<${#args[@]};i++)); do
-  if [ "${args[i]}" = "-o" ]; then
-    OUTPUT="${args[i+1]}"
-  fi
-  if [[ "${args[i]}" == https* ]]; then
-    URL="${args[i]}"
-  fi
-done
-SCENARIO="${CURL_SCENARIO:-success}"
+echo "git $*" >> "$FAKE_LOG"
+if [ "${1:-}" != "clone" ]; then
+  echo "git stub: only clone supported, got $*" >&2
+  exit 1
+fi
+# DEST is last argument
+DEST="${@: -1}"
+# Support both GIT_SCENARIO and legacy CURL_SCENARIO for backwards compat
+SCENARIO="${GIT_SCENARIO:-}"
+if [ -z "$SCENARIO" ] && [ -n "${CURL_SCENARIO:-}" ]; then
+  case "${CURL_SCENARIO}" in
+    fail) SCENARIO="fail" ;;
+    empty) SCENARIO="empty" ;;
+    empty-ext) SCENARIO="empty-ext" ;;
+    invalid-subagents) SCENARIO="invalid-subagents" ;;
+    *) SCENARIO="success" ;;
+  esac
+fi
+SCENARIO="${SCENARIO:-success}"
 case "$SCENARIO" in
   fail)
     exit 22
     ;;
   empty)
-    : > "$OUTPUT"
+    mkdir -p "$DEST"
+    mkdir -p "$DEST/extensions/generate-design"
+    : > "$DEST/AGENTS.md"
+    : > "$DEST/subagents.json"
+    mkdir -p "$DEST/extensions/chat-only"
+    : > "$DEST/extensions/chat-only/chat-only.js"
+    : > "$DEST/extensions/generate-design/index.ts"
     exit 0
     ;;
   empty-ext)
-    if [[ "$URL" == *"chat-only.ts"* ]]; then
-      : > "$OUTPUT"
-      exit 0
-    elif [[ "$URL" == *"AGENTS.md"* ]]; then
-      cat "$FIXTURE_AGENTS" > "$OUTPUT"
-      exit 0
-    elif [[ "$URL" == *"subagents.json"* ]]; then
-      cat "$FIXTURE_SUBAGENTS" > "$OUTPUT"
-      exit 0
+    mkdir -p "$DEST"
+    mkdir -p "$DEST/extensions/generate-design/skills"
+    cat "$FIXTURE_AGENTS" > "$DEST/AGENTS.md"
+    cat "$FIXTURE_SUBAGENTS" > "$DEST/subagents.json"
+    mkdir -p "$DEST/extensions/chat-only"
+    : > "$DEST/extensions/chat-only/chat-only.js"
+    # populate generate-design so copy -r succeeds
+    if [ -d "$PROJECT_ROOT/extensions/generate-design" ]; then
+      cp -r "$PROJECT_ROOT/extensions/generate-design/." "$DEST/extensions/generate-design/" 2>/dev/null || true
+      : > "$DEST/extensions/chat-only/chat-only.js"
     else
-      : > "$OUTPUT"
-      exit 0
+      echo "stub" > "$DEST/extensions/generate-design/index.ts"
     fi
+    exit 0
     ;;
   invalid-subagents)
-    if [[ "$URL" == *"subagents.json"* ]]; then
-      echo "not-json" > "$OUTPUT"
-      exit 0
-    elif [[ "$URL" == *"chat-only.ts"* ]]; then
-      cat "$FIXTURE_EXT" > "$OUTPUT"
-      exit 0
-    else
-      cat "$FIXTURE_AGENTS" > "$OUTPUT"
-      exit 0
+    mkdir -p "$DEST"
+    mkdir -p "$DEST/extensions/generate-design"
+    cat "$FIXTURE_AGENTS" > "$DEST/AGENTS.md"
+    echo "not-json" > "$DEST/subagents.json"
+    mkdir -p "$DEST/extensions/chat-only"
+    cat "$FIXTURE_EXT" > "$DEST/extensions/chat-only/chat-only.js"
+    if [ -d "$PROJECT_ROOT/extensions/generate-design" ]; then
+      cp -r "$PROJECT_ROOT/extensions/generate-design/." "$DEST/extensions/generate-design/" 2>/dev/null || true
     fi
+    exit 0
+    ;;
+  missing-agents)
+    mkdir -p "$DEST"
+    mkdir -p "$DEST/extensions/generate-design"
+    # no AGENTS.md
+    cat "$FIXTURE_SUBAGENTS" > "$DEST/subagents.json"
+    mkdir -p "$DEST/extensions/chat-only"
+    cat "$FIXTURE_EXT" > "$DEST/extensions/chat-only/chat-only.js"
+    if [ -d "$PROJECT_ROOT/extensions/generate-design" ]; then
+      cp -r "$PROJECT_ROOT/extensions/generate-design/." "$DEST/extensions/generate-design/" 2>/dev/null || true
+    fi
+    exit 0
+    ;;
+  missing-extension)
+    mkdir -p "$DEST"
+    mkdir -p "$DEST/extensions/generate-design"
+    cat "$FIXTURE_AGENTS" > "$DEST/AGENTS.md"
+    cat "$FIXTURE_SUBAGENTS" > "$DEST/subagents.json"
+    mkdir -p "$DEST/extensions/chat-only"
+    # intentionally no chat-only.js
+    rm -f "$DEST/extensions/chat-only/chat-only.js"
+    if [ -d "$PROJECT_ROOT/extensions/generate-design" ]; then
+      cp -r "$PROJECT_ROOT/extensions/generate-design/." "$DEST/extensions/generate-design/" 2>/dev/null || true
+    fi
+    exit 0
     ;;
   *)
-    # success
-    if [[ "$URL" == *"AGENTS.md"* ]]; then
-      cat "$FIXTURE_AGENTS" > "$OUTPUT"
-      exit 0
-    elif [[ "$URL" == *"subagents.json"* ]]; then
-      cat "$FIXTURE_SUBAGENTS" > "$OUTPUT"
-      exit 0
-    elif [[ "$URL" == *"chat-only.ts"* ]]; then
-      cat "$FIXTURE_EXT" > "$OUTPUT"
-      exit 0
-    else
-      echo "curl stub: unknown URL $URL" >&2
-      exit 1
+    # success – populate clone from fixtures + real generate-design
+    mkdir -p "$DEST"
+    cat "$FIXTURE_AGENTS" > "$DEST/AGENTS.md"
+    cat "$FIXTURE_SUBAGENTS" > "$DEST/subagents.json"
+    mkdir -p "$DEST/extensions/chat-only"
+    cat "$FIXTURE_EXT" > "$DEST/extensions/chat-only/chat-only.js"
+    mkdir -p "$DEST/extensions/generate-design/skills"
+    if [ -d "$PROJECT_ROOT/extensions/generate-design" ]; then
+      cp -r "$PROJECT_ROOT/extensions/generate-design/." "$DEST/extensions/generate-design/" 2>/dev/null || true
     fi
+    # ensure at least one file exists for copy -r
+    if [ ! -f "$DEST/extensions/generate-design/index.ts" ]; then
+      echo "// stub generate-design" > "$DEST/extensions/generate-design/index.ts"
+    fi
+    exit 0
     ;;
 esac
 EOS
-  chmod +x "$FAKE_BIN/curl"
+  chmod +x "$FAKE_BIN/git"
 
-  # Ensure real jq is available via PATH unless test hides it
-  # (jq lives in /usr/bin, which stays in ORIG_PATH)
+  export GIT_SCENARIO="success"
   export CURL_SCENARIO="success"
 }
 
@@ -137,9 +177,9 @@ run_setup() {
 @test "fresh install creates chat-only extension" {
   run_setup
   [ "$status" -eq 0 ]
-  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
-  grep -q "chat-only-state" "$HOME/.pi/agent/extensions/chat-only.ts"
+  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  grep -q "chat-only-state" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
   [[ "$output" == *"chat-only"* ]] || [[ "$output" == *"extensions"* ]]
 }
 
@@ -160,8 +200,8 @@ run_setup() {
   # vision.json not overwritten
   grep -q "opencode-go" "$HOME/.pi/agent/vision.json"
   # extension still present after second run
-  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
+  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
 }
 
 @test "merge preserves user customizations (user settings win)" {
@@ -188,44 +228,39 @@ EOF
   grep -q "deepseek-v4-flash" "$HOME/.pi/agent/settings.json"
 }
 
-@test "curl failure for AGENTS.md does not create empty file and still exits 0" {
-  export CURL_SCENARIO="fail"
+@test "git clone failure exits non-zero and reports error" {
+  export GIT_SCENARIO="fail"
   run_setup
-  [ "$status" -eq 0 ]
-  # warning goes to stderr, but script still prints Done
-  [[ "$output" == *"Done"* ]]
-  # AGENTS.md should not contain fixture
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"failed to clone"* ]] || [[ "$output" == *"Error"* ]]
+  # no AGENTS.md created from failed clone
   if [ -f "$HOME/.pi/agent/AGENTS.md" ]; then
     ! grep -q "Test fixture AGENTS line" "$HOME/.pi/agent/AGENTS.md"
   fi
-  # settings also skipped because subagents fetch also fails in this mode – warning expected
-  [[ "$output" == *"Warning"* ]] || [[ "$stderr" == *"Warning"* ]] || true
 }
 
-@test "empty curl response is treated as failure – no empty append" {
-  export CURL_SCENARIO="empty"
+@test "empty clone files are warned and not appended" {
+  export GIT_SCENARIO="empty"
   run_setup
   [ "$status" -eq 0 ]
-  # AGENTS.md should not have marker from empty fetch
+  # AGENTS.md should not have marker from empty file ( -s check )
   if [ -f "$HOME/.pi/agent/AGENTS.md" ]; then
     ! grep -q "code-setup AGENTS.md" "$HOME/.pi/agent/AGENTS.md" || true
   fi
-  [[ "$output" == *"Failed to fetch AGENTS.md"* ]]
+  [[ "$output" == *"Warning"* ]]
+  [[ "$output" == *"AGENTS.md not found"* ]] || [[ "$output" == *"not found in clone"* ]]
 }
 
-@test "local fallback used when curl fails and file exists next to script" {
-  export CURL_SCENARIO="fail"
-  # create a temporary script dir with subagents.json
-  TMP_SCRIPT_DIR="$(mktemp -d)"
-  cp "$PROJECT_ROOT/test/fixtures/subagents.json" "$TMP_SCRIPT_DIR/subagents.json"
-  cp "$PROJECT_ROOT/setup.sh" "$TMP_SCRIPT_DIR/setup.sh"
-  # run the copy so BASH_SOURCE points there
-  run bash "$TMP_SCRIPT_DIR/setup.sh"
+@test "clone succeeds regardless of cwd (no SCRIPT_DIR fallback needed)" {
+  TMP_RUN_DIR="$(mktemp -d)"
+  cp "$PROJECT_ROOT/setup.sh" "$TMP_RUN_DIR/setup.sh"
+  run bash "$TMP_RUN_DIR/setup.sh"
   [ "$status" -eq 0 ]
-  grep -q "Using local subagents.json" <<< "$output"
   [ -f "$HOME/.pi/agent/settings.json" ]
   grep -q "muse-spark" "$HOME/.pi/agent/settings.json"
-  rm -rf "$TMP_SCRIPT_DIR"
+  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  rm -rf "$TMP_RUN_DIR"
 }
 
 @test "invalid JSON in existing settings.json is backed up and reset" {
@@ -241,13 +276,11 @@ EOF
   grep -q "muse-spark" "$HOME/.pi/agent/settings.json"
 }
 
-@test "invalid JSON in fetched subagents is skipped with warning" {
-  export CURL_SCENARIO="invalid-subagents"
+@test "invalid JSON in cloned subagents is skipped with warning" {
+  export GIT_SCENARIO="invalid-subagents"
   run_setup
   [ "$status" -eq 0 ]
   [[ "$output" == *"not valid JSON"* ]]
-  # settings not created from invalid source – but valid empty fallback?
-  # if settings was {} it should stay {}
   if [ -f "$HOME/.pi/agent/settings.json" ]; then
     jq empty "$HOME/.pi/agent/settings.json"
   fi
@@ -261,13 +294,12 @@ EOF
   for b in bash sh cat grep mkdir mktemp rm mv cp dirname pwd date head tr cut sort chmod ls wc; do
     if p=$(command -v "$b" 2>/dev/null); then ln -sf "$p" "$TEST_TMP/nojq-bin/$b"; fi
   done
-  cp "$FAKE_BIN/curl" "$TEST_TMP/nojq-bin/"
+  cp "$FAKE_BIN/git" "$TEST_TMP/nojq-bin/"
   cp "$FAKE_BIN/npm" "$TEST_TMP/nojq-bin/"
   cp "$FAKE_BIN/pi" "$TEST_TMP/nojq-bin/"
-  # also need pi and npm helpers to find bash
   export PATH="$TEST_TMP/nojq-bin:$FAKE_BIN"
   # ensure jq not found
-  ! command -v jq >/dev/null 2>&1
+  ! command -v jq >/dev/null 2>&1 || { echo "jq still found at $(command -v jq)"; false; }
   run bash "$PROJECT_ROOT/setup.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"jq is required"* ]]
@@ -297,70 +329,84 @@ EOS
   [[ "$output" != *"Merged"* ]] || [[ "$output" == *"failed"* ]]
 }
 
-@test "extension installed via local fallback when curl fails" {
-  export CURL_SCENARIO="fail"
-  TMP_SCRIPT_DIR="$(mktemp -d)"
-  mkdir -p "$TMP_SCRIPT_DIR/extensions"
-  cp "$PROJECT_ROOT/test/fixtures/chat-only.ts" "$TMP_SCRIPT_DIR/extensions/chat-only.ts"
-  cp "$PROJECT_ROOT/test/fixtures/subagents.json" "$TMP_SCRIPT_DIR/subagents.json"
-  cp "$PROJECT_ROOT/test/fixtures/AGENTS.md" "$TMP_SCRIPT_DIR/AGENTS.md"
-  cp "$PROJECT_ROOT/setup.sh" "$TMP_SCRIPT_DIR/setup.sh"
-  run bash "$TMP_SCRIPT_DIR/setup.sh"
-  [ "$status" -eq 0 ]
-  grep -q "Using local extensions/chat-only.ts" <<< "$output"
-  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
-  rm -rf "$TMP_SCRIPT_DIR"
-}
-
-@test "extension curl failure still exits 0 and warns when no fallback" {
-  export CURL_SCENARIO="fail"
-  # run from a temp dir with no extensions folder – fallback should be missing
-  TMP_SCRIPT_DIR="$(mktemp -d)"
-  cp "$PROJECT_ROOT/setup.sh" "$TMP_SCRIPT_DIR/setup.sh"
-  run bash "$TMP_SCRIPT_DIR/setup.sh"
-  [ "$status" -eq 0 ]
-  [[ "$output" == *"Warning"* ]]
-  [[ "$output" == *"extensions/chat-only.ts not found"* ]]
-  # extension not created, but script still succeeds
-  [ ! -f "$HOME/.pi/agent/extensions/chat-only.ts" ] || true
-  rm -rf "$TMP_SCRIPT_DIR"
-}
-
-@test "empty extension response is treated as failure – falls back to local" {
-  export CURL_SCENARIO="empty-ext"
+@test "extension installed via clone when chat-only present" {
+  export GIT_SCENARIO="success"
   run_setup
   [ "$status" -eq 0 ]
-  # empty remote should trigger local fallback when file exists
-  [[ "$output" == *"Using local extensions/chat-only.ts"* ]] || [[ "$output" == *"Fetched chat-only"* ]]
-  # extension should still be installed and non-empty via fallback (real file, not fixture)
-  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
-  [ -s "$HOME/.pi/agent/extensions/chat-only.ts" ]
-  grep -q "chat-only-state" "$HOME/.pi/agent/extensions/chat-only.ts"
+  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  [[ "$output" == *"from clone"* ]]
+}
+
+@test "extension missing in clone still exits 0 and warns" {
+  export GIT_SCENARIO="missing-extension"
+  run_setup
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Warning"* ]]
+  [[ "$output" == *"extensions/chat-only/chat-only.js not found"* ]]
+  # extension not created
+  [ ! -s "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ] || true
+}
+
+@test "empty extension in clone is warned and not installed" {
+  export GIT_SCENARIO="empty-ext"
+  run_setup
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Warning"* ]]
+  [[ "$output" == *"chat-only"* ]]
+  # extension should not be installed from empty file ( -s check )
+  [ ! -s "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ] || true
 }
 
 @test "extension is re-installed on second run and overwrites correctly" {
   run_setup
   [ "$status" -eq 0 ]
-  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
   # modify installed file to simulate old version
-  echo "// old version" > "$HOME/.pi/agent/extensions/chat-only.ts"
-  grep -q "old version" "$HOME/.pi/agent/extensions/chat-only.ts"
+  echo "// old version" > "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  grep -q "old version" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
   # second run should overwrite with fixture content
   run bash "$PROJECT_ROOT/setup.sh"
   [ "$status" -eq 0 ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
-  ! grep -q "old version" "$HOME/.pi/agent/extensions/chat-only.ts"
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  ! grep -q "old version" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
 }
 
 @test "chat-only extension defaults to tools enabled (/tools default, /chat manual)" {
   run_setup
   [ "$status" -eq 0 ]
-  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
   # new sessions default to tools – chatModeEnabled must be false
-  grep -q "let chatModeEnabled = false" "$HOME/.pi/agent/extensions/chat-only.ts"
-  grep -q "Starts every session with tools enabled" "$HOME/.pi/agent/extensions/chat-only.ts"
-  grep -q "Every new session defaults to tools enabled" "$HOME/.pi/agent/extensions/chat-only.ts"
+  grep -q "let chatModeEnabled = false" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  grep -q "Starts every session with tools enabled" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  grep -q "Every new session defaults to tools enabled" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
   # chat-only is opt-in via /chat, not default
-  ! grep -q "Every new session defaults to chat-only" "$HOME/.pi/agent/extensions/chat-only.ts"
+  ! grep -q "Every new session defaults to chat-only" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+}
+
+@test "generate-design extension is installed from clone" {
+  run_setup
+  [ "$status" -eq 0 ]
+  [ -d "$HOME/.pi/agent/extensions/generate-design" ]
+  [ -f "$HOME/.pi/agent/extensions/generate-design/index.ts" ] || [ -f "$HOME/.pi/agent/extensions/generate-design/manifest.json" ]
+}
+
+@test "missing git binary fails fast with helpful message" {
+  # hide git
+  mkdir -p "$TEST_TMP/nogit-bin"
+  for b in bash sh cat grep mkdir mktemp rm mv cp dirname pwd date head tr cut sort chmod ls wc npm pi jq; do
+    if p=$(command -v "$b" 2>/dev/null); then
+      # skip git
+      if [ "$b" = "git" ]; then continue; fi
+      ln -sf "$p" "$TEST_TMP/nogit-bin/$b" 2>/dev/null || true
+    fi
+  done
+  # copy our fake npm/pi into nogit bin so setup can find them
+  cp "$FAKE_BIN/npm" "$TEST_TMP/nogit-bin/" 2>/dev/null || true
+  cp "$FAKE_BIN/pi" "$TEST_TMP/nogit-bin/" 2>/dev/null || true
+  export PATH="$TEST_TMP/nogit-bin"
+  ! command -v git >/dev/null 2>&1
+  run bash "$PROJECT_ROOT/setup.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"git is required"* ]]
 }

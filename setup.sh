@@ -1,20 +1,31 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="https://raw.githubusercontent.com/hidayatullahap/code-setup/main"
+REPO_URL="https://github.com/hidayatullahap/code-setup.git"
+REPO_BRANCH="main"
 AGENTS_MARKER="# code-setup AGENTS.md"
 
-TMP_AGENTS=""
-TMP_SUBAGENTS=""
+CLONE_DIR=""
 TMP_MERGED=""
-TMP_EXT=""
 cleanup() {
-  if [ -n "$TMP_AGENTS" ]; then rm -f "$TMP_AGENTS" 2>/dev/null || true; fi
-  if [ -n "$TMP_SUBAGENTS" ]; then rm -f "$TMP_SUBAGENTS" 2>/dev/null || true; fi
+  if [ -n "$CLONE_DIR" ] && [ -d "$CLONE_DIR" ]; then rm -rf "$CLONE_DIR" 2>/dev/null || true; fi
   if [ -n "$TMP_MERGED" ]; then rm -f "$TMP_MERGED" 2>/dev/null || true; fi
-  if [ -n "$TMP_EXT" ]; then rm -f "$TMP_EXT" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
+
+echo "==> Cloning code-setup repo..."
+if ! command -v git >/dev/null 2>&1; then
+  echo "Error: git is required but not found. Install git first (e.g. sudo apt-get install -y git) and re-run setup." >&2
+  exit 1
+fi
+
+CLONE_DIR="$(mktemp -d)"
+echo "Cloning $REPO_URL (branch: $REPO_BRANCH) into $CLONE_DIR ..."
+if ! git clone --depth 1 --branch "$REPO_BRANCH" "$REPO_URL" "$CLONE_DIR"; then
+  echo "Error: failed to clone $REPO_URL (branch: $REPO_BRANCH)" >&2
+  exit 1
+fi
+echo "Cloned into $CLONE_DIR"
 
 echo "==> Installing pi..."
 npm install -g --ignore-scripts @earendil-works/pi-coding-agent
@@ -44,145 +55,46 @@ else
 fi
 
 echo "==> Installing extensions..."
-mkdir -p "$HOME/.pi/agent/extensions"
-EXT_URL="$REPO_ROOT/extensions/chat-only.ts"
-TMP_EXT="$(mktemp)"
-EXT_SRC=""
-
-if curl -fsSL "$EXT_URL" -o "$TMP_EXT" 2>/dev/null && [ -s "$TMP_EXT" ]; then
-  EXT_SRC="$TMP_EXT"
-  echo "Fetched chat-only.ts from $EXT_URL"
+mkdir -p "$HOME/.pi/agent/extensions/chat-only"
+if [ -s "$CLONE_DIR/extensions/chat-only/chat-only.js" ]; then
+  cp "$CLONE_DIR/extensions/chat-only/chat-only.js" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  echo "Installed chat-only extension to \$HOME/.pi/agent/extensions/chat-only/chat-only.js (from clone)"
 else
-  # Local fallback for git-clone installs
-  _src="${BASH_SOURCE[0]:-}"
-  if [ -n "$_src" ] && [ "$_src" != "bash" ] && [ "$_src" != "-" ]; then
-    if ! SCRIPT_DIR_EXT="$(cd "$(dirname "$_src")" 2>/dev/null && pwd)"; then
-      SCRIPT_DIR_EXT="$(pwd)"
-    fi
-  else
-    SCRIPT_DIR_EXT="$(pwd)"
-  fi
-  if [ -f "$SCRIPT_DIR_EXT/extensions/chat-only.ts" ]; then
-    EXT_SRC="$SCRIPT_DIR_EXT/extensions/chat-only.ts"
-    echo "Using local extensions/chat-only.ts at $EXT_SRC"
-    # Copy content to TMP_EXT so later logic is uniform, but keep EXT_SRC for direct cp
-    # Clean up the empty TMP_EXT we created for the curl attempt
-    rm -f "$TMP_EXT" 2>/dev/null || true
-    TMP_EXT=""
-  else
-    rm -f "$TMP_EXT" 2>/dev/null || true
-    TMP_EXT=""
-  fi
-fi
-
-if [ -z "$EXT_SRC" ] || [ ! -f "$EXT_SRC" ]; then
-  echo "Warning: extensions/chat-only.ts not found (tried $EXT_URL and local file), skipping" >&2
-else
-  cp "$EXT_SRC" "$HOME/.pi/agent/extensions/chat-only.ts"
-  echo "Installed chat-only extension to \$HOME/.pi/agent/extensions/chat-only.ts"
-  # Clean up TMP_EXT if it was the source
-  if [ -n "$TMP_EXT" ] && [ "$EXT_SRC" = "$TMP_EXT" ]; then
-    rm -f "$TMP_EXT" 2>/dev/null || true
-    TMP_EXT=""
-  fi
+  echo "Warning: extensions/chat-only/chat-only.js not found in clone ($CLONE_DIR), skipping" >&2
 fi
 
 echo "==> Installing generate-design extension..."
-GD_SRC=""
 GD_DEST="$HOME/.pi/agent/extensions/generate-design"
-# Resolve script dir for local fallback
-if [ -z "${SCRIPT_DIR_EXT:-}" ]; then
-  _src2="${BASH_SOURCE[0]:-}"
-  if [ -n "$_src2" ] && [ "$_src2" != "bash" ] && [ "$_src2" != "-" ]; then
-    SCRIPT_DIR_EXT="$(cd "$(dirname "$_src2")" 2>/dev/null && pwd || pwd)"
-  else
-    SCRIPT_DIR_EXT="$(pwd)"
-  fi
-fi
-if [ -d "$SCRIPT_DIR_EXT/extensions/generate-design" ]; then
-  GD_SRC="$SCRIPT_DIR_EXT/extensions/generate-design"
-  echo "Using local extensions/generate-design at $GD_SRC"
+if [ -d "$CLONE_DIR/extensions/generate-design" ]; then
   mkdir -p "$GD_DEST"
-  cp -r "$GD_SRC/"* "$GD_DEST/"
-  echo "Installed generate-design extension to $GD_DEST/"
+  cp -r "$CLONE_DIR/extensions/generate-design/"* "$GD_DEST/"
+  echo "Installed generate-design extension to $GD_DEST/ (from clone)"
 else
-  # Remote fallback: fetch individual files from REPO_ROOT
-  mkdir -p "$GD_DEST/skills"
-  fetched=0
-  for f in index.ts checker.ts manifest.json README.md; do
-    url="$REPO_ROOT/extensions/generate-design/$f"
-    tmp="$(mktemp)"
-    if curl -fsSL "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
-      cp "$tmp" "$GD_DEST/$f"
-      echo "Fetched $f from $url"
-      fetched=$((fetched+1))
-    fi
-    rm -f "$tmp" 2>/dev/null || true
-  done
-  for f in design-workflow.md html-output-rules.md anti-slop.md design-commitment.md craft-polish.md revision-tweaks.md; do
-    url="$REPO_ROOT/extensions/generate-design/skills/$f"
-    tmp="$(mktemp)"
-    if curl -fsSL "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
-      cp "$tmp" "$GD_DEST/skills/$f"
-      echo "Fetched skills/$f from $url"
-      fetched=$((fetched+1))
-    fi
-    rm -f "$tmp" 2>/dev/null || true
-  done
-  if [ "$fetched" -eq 0 ]; then
-    echo "Warning: extensions/generate-design not found (tried $REPO_ROOT and local file), skipping" >&2
-    rmdir "$GD_DEST/skills" 2>/dev/null || true
-    rmdir "$GD_DEST" 2>/dev/null || true
-  else
-    echo "Installed generate-design extension to $GD_DEST/ ($fetched files)"
-  fi
+  echo "Warning: extensions/generate-design not found in clone ($CLONE_DIR), skipping" >&2
 fi
 
 echo "==> Appending AGENTS.md..."
-AGENTS_URL="$REPO_ROOT/AGENTS.md"
-TMP_AGENTS="$(mktemp)"
-if curl -fsSL "$AGENTS_URL" -o "$TMP_AGENTS" 2>/dev/null && [ -s "$TMP_AGENTS" ]; then
+if [ -s "$CLONE_DIR/AGENTS.md" ]; then
   if ! grep -qF "$AGENTS_MARKER" "$HOME/.pi/agent/AGENTS.md" 2>/dev/null; then
     {
       echo ""
       echo "$AGENTS_MARKER"
-      cat "$TMP_AGENTS"
+      cat "$CLONE_DIR/AGENTS.md"
     } >> "$HOME/.pi/agent/AGENTS.md"
     echo "Appended AGENTS.md to \$HOME/.pi/agent/AGENTS.md"
   else
     echo "AGENTS.md already appended, skipping"
   fi
 else
-  echo "Failed to fetch AGENTS.md from $AGENTS_URL" >&2
+  echo "Warning: AGENTS.md not found in clone ($CLONE_DIR), skipping" >&2
 fi
 
 echo "==> Configuring subagents in settings.json..."
 SETTINGS_FILE="$HOME/.pi/agent/settings.json"
-SUBAGENTS_URL="$REPO_ROOT/subagents.json"
-TMP_SUBAGENTS="$(mktemp)"
-SUBAGENTS_SRC=""
+SUBAGENTS_SRC="$CLONE_DIR/subagents.json"
 
-if curl -fsSL "$SUBAGENTS_URL" -o "$TMP_SUBAGENTS" 2>/dev/null && [ -s "$TMP_SUBAGENTS" ]; then
-  SUBAGENTS_SRC="$TMP_SUBAGENTS"
-  echo "Fetched subagents.json from $SUBAGENTS_URL"
-else
-  # Local fallback for git-clone installs – one candidate is enough
-  _src="${BASH_SOURCE[0]:-}"
-  if [ -n "$_src" ] && [ "$_src" != "bash" ] && [ "$_src" != "-" ]; then
-    if ! SCRIPT_DIR="$(cd "$(dirname "$_src")" 2>/dev/null && pwd)"; then
-      SCRIPT_DIR="$(pwd)"
-    fi
-  else
-    SCRIPT_DIR="$(pwd)"
-  fi
-  if [ -f "$SCRIPT_DIR/subagents.json" ]; then
-    SUBAGENTS_SRC="$SCRIPT_DIR/subagents.json"
-    echo "Using local subagents.json at $SUBAGENTS_SRC"
-  fi
-fi
-
-if [ -z "$SUBAGENTS_SRC" ] || [ ! -f "$SUBAGENTS_SRC" ]; then
-  echo "Warning: subagents.json not found (tried $SUBAGENTS_URL and local file), skipping" >&2
+if [ ! -s "$SUBAGENTS_SRC" ]; then
+  echo "Warning: subagents.json not found in clone ($CLONE_DIR), skipping" >&2
 else
   if [ ! -f "$SETTINGS_FILE" ] || [ ! -s "$SETTINGS_FILE" ]; then
     echo "{}" > "$SETTINGS_FILE"
