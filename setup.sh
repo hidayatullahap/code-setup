@@ -87,6 +87,57 @@ else
   fi
 fi
 
+echo "==> Installing generate-design extension..."
+GD_SRC=""
+GD_DEST="$HOME/.pi/agent/extensions/generate-design"
+# Resolve script dir for local fallback
+if [ -z "${SCRIPT_DIR_EXT:-}" ]; then
+  _src2="${BASH_SOURCE[0]:-}"
+  if [ -n "$_src2" ] && [ "$_src2" != "bash" ] && [ "$_src2" != "-" ]; then
+    SCRIPT_DIR_EXT="$(cd "$(dirname "$_src2")" 2>/dev/null && pwd || pwd)"
+  else
+    SCRIPT_DIR_EXT="$(pwd)"
+  fi
+fi
+if [ -d "$SCRIPT_DIR_EXT/extensions/generate-design" ]; then
+  GD_SRC="$SCRIPT_DIR_EXT/extensions/generate-design"
+  echo "Using local extensions/generate-design at $GD_SRC"
+  mkdir -p "$GD_DEST"
+  cp -r "$GD_SRC/"* "$GD_DEST/"
+  echo "Installed generate-design extension to $GD_DEST/"
+else
+  # Remote fallback: fetch individual files from REPO_ROOT
+  mkdir -p "$GD_DEST/skills"
+  fetched=0
+  for f in index.ts checker.ts manifest.json README.md; do
+    url="$REPO_ROOT/extensions/generate-design/$f"
+    tmp="$(mktemp)"
+    if curl -fsSL "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+      cp "$tmp" "$GD_DEST/$f"
+      echo "Fetched $f from $url"
+      fetched=$((fetched+1))
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+  done
+  for f in design-workflow.md html-output-rules.md anti-slop.md design-commitment.md craft-polish.md revision-tweaks.md; do
+    url="$REPO_ROOT/extensions/generate-design/skills/$f"
+    tmp="$(mktemp)"
+    if curl -fsSL "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+      cp "$tmp" "$GD_DEST/skills/$f"
+      echo "Fetched skills/$f from $url"
+      fetched=$((fetched+1))
+    fi
+    rm -f "$tmp" 2>/dev/null || true
+  done
+  if [ "$fetched" -eq 0 ]; then
+    echo "Warning: extensions/generate-design not found (tried $REPO_ROOT and local file), skipping" >&2
+    rmdir "$GD_DEST/skills" 2>/dev/null || true
+    rmdir "$GD_DEST" 2>/dev/null || true
+  else
+    echo "Installed generate-design extension to $GD_DEST/ ($fetched files)"
+  fi
+fi
+
 echo "==> Appending AGENTS.md..."
 AGENTS_URL="$REPO_ROOT/AGENTS.md"
 TMP_AGENTS="$(mktemp)"

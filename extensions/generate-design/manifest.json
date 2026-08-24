@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "name": "generate-design-skill",
+  "description": "Quality-steering skill pack for an HTML-only design generator: single index.html output, one page per run, freeform natural-language tweaks, DESIGN.md as cross-run consistency memory.",
+  "source": "Distilled from Open CoDesign (https://github.com/OpenCoworkAI/open-codesign), MIT License — prompt sections packages/core/src/prompts/sections/*.md and skills apps/desktop/resources/templates/skills/{craft-polish,frontend-design-anti-slop,responsive-layout}.md",
+  "license": "MIT",
+  "targetOutput": "index.html (single self-contained file)",
+  "composition": {
+    "systemPromptAlways": [
+      "design-workflow.md",
+      "html-output-rules.md",
+      "anti-slop.md"
+    ],
+    "systemPromptWhenRelevant": [
+      {
+        "skill": "design-commitment.md",
+        "when": "always include if workspace uses DESIGN.md; otherwise include on first run so the file gets created"
+      },
+      {
+        "skill": "craft-polish.md",
+        "when": "inject before the final self-check phase of each run"
+      },
+      {
+        "skill": "revision-tweaks.md",
+        "when": "inject only on follow-up edit/tweak turns, replacing design-workflow.md step 4-5 emphasis"
+      }
+    ]
+  },
+  "skills": [
+    { "name": "design-workflow", "path": "skills/design-workflow.md" },
+    { "name": "html-output-rules", "path": "skills/html-output-rules.md" },
+    { "name": "anti-slop", "path": "skills/anti-slop.md" },
+    { "name": "design-commitment", "path": "skills/design-commitment.md" },
+    { "name": "craft-polish", "path": "skills/craft-polish.md" },
+    { "name": "revision-tweaks", "path": "skills/revision-tweaks.md" }
+  ]
+}
