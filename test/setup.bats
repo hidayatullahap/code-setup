@@ -16,6 +16,7 @@ setup() {
   export PROJECT_ROOT="$(cd "$BATS_TEST_DIRNAME/.." && pwd)"
   export FIXTURE_AGENTS="$PROJECT_ROOT/test/fixtures/AGENTS.md"
   export FIXTURE_SUBAGENTS="$PROJECT_ROOT/test/fixtures/subagents.json"
+  export FIXTURE_EXT="$PROJECT_ROOT/test/fixtures/chat-only.ts"
   export FAKE_LOG="$TEST_TMP/fake.log"
 
   # default stubs – npm and pi are always faked
@@ -59,9 +60,27 @@ case "$SCENARIO" in
     : > "$OUTPUT"
     exit 0
     ;;
+  empty-ext)
+    if [[ "$URL" == *"chat-only.ts"* ]]; then
+      : > "$OUTPUT"
+      exit 0
+    elif [[ "$URL" == *"AGENTS.md"* ]]; then
+      cat "$FIXTURE_AGENTS" > "$OUTPUT"
+      exit 0
+    elif [[ "$URL" == *"subagents.json"* ]]; then
+      cat "$FIXTURE_SUBAGENTS" > "$OUTPUT"
+      exit 0
+    else
+      : > "$OUTPUT"
+      exit 0
+    fi
+    ;;
   invalid-subagents)
     if [[ "$URL" == *"subagents.json"* ]]; then
       echo "not-json" > "$OUTPUT"
+      exit 0
+    elif [[ "$URL" == *"chat-only.ts"* ]]; then
+      cat "$FIXTURE_EXT" > "$OUTPUT"
       exit 0
     else
       cat "$FIXTURE_AGENTS" > "$OUTPUT"
@@ -75,6 +94,9 @@ case "$SCENARIO" in
       exit 0
     elif [[ "$URL" == *"subagents.json"* ]]; then
       cat "$FIXTURE_SUBAGENTS" > "$OUTPUT"
+      exit 0
+    elif [[ "$URL" == *"chat-only.ts"* ]]; then
+      cat "$FIXTURE_EXT" > "$OUTPUT"
       exit 0
     else
       echo "curl stub: unknown URL $URL" >&2
@@ -112,6 +134,15 @@ run_setup() {
   grep -q "muse-spark-1.2-contributor" "$HOME/.pi/agent/settings.json"
 }
 
+@test "fresh install creates chat-only extension" {
+  run_setup
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
+  grep -q "chat-only-state" "$HOME/.pi/agent/extensions/chat-only.ts"
+  [[ "$output" == *"chat-only"* ]] || [[ "$output" == *"extensions"* ]]
+}
+
 @test "second run is idempotent – AGENTS.md not duplicated" {
   run_setup
   [ "$status" -eq 0 ]
@@ -128,6 +159,9 @@ run_setup() {
   [ "$marker_after" -eq 1 ]
   # vision.json not overwritten
   grep -q "opencode-go" "$HOME/.pi/agent/vision.json"
+  # extension still present after second run
+  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
 }
 
 @test "merge preserves user customizations (user settings win)" {
@@ -261,4 +295,60 @@ EOS
   [ "$status" -eq 0 ]
   [[ "$output" == *"failed to merge"* ]]
   [[ "$output" != *"Merged"* ]] || [[ "$output" == *"failed"* ]]
+}
+
+@test "extension installed via local fallback when curl fails" {
+  export CURL_SCENARIO="fail"
+  TMP_SCRIPT_DIR="$(mktemp -d)"
+  mkdir -p "$TMP_SCRIPT_DIR/extensions"
+  cp "$PROJECT_ROOT/test/fixtures/chat-only.ts" "$TMP_SCRIPT_DIR/extensions/chat-only.ts"
+  cp "$PROJECT_ROOT/test/fixtures/subagents.json" "$TMP_SCRIPT_DIR/subagents.json"
+  cp "$PROJECT_ROOT/test/fixtures/AGENTS.md" "$TMP_SCRIPT_DIR/AGENTS.md"
+  cp "$PROJECT_ROOT/setup.sh" "$TMP_SCRIPT_DIR/setup.sh"
+  run bash "$TMP_SCRIPT_DIR/setup.sh"
+  [ "$status" -eq 0 ]
+  grep -q "Using local extensions/chat-only.ts" <<< "$output"
+  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
+  rm -rf "$TMP_SCRIPT_DIR"
+}
+
+@test "extension curl failure still exits 0 and warns when no fallback" {
+  export CURL_SCENARIO="fail"
+  # run from a temp dir with no extensions folder – fallback should be missing
+  TMP_SCRIPT_DIR="$(mktemp -d)"
+  cp "$PROJECT_ROOT/setup.sh" "$TMP_SCRIPT_DIR/setup.sh"
+  run bash "$TMP_SCRIPT_DIR/setup.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Warning"* ]]
+  [[ "$output" == *"extensions/chat-only.ts not found"* ]]
+  # extension not created, but script still succeeds
+  [ ! -f "$HOME/.pi/agent/extensions/chat-only.ts" ] || true
+  rm -rf "$TMP_SCRIPT_DIR"
+}
+
+@test "empty extension response is treated as failure – falls back to local" {
+  export CURL_SCENARIO="empty-ext"
+  run_setup
+  [ "$status" -eq 0 ]
+  # empty remote should trigger local fallback when file exists
+  [[ "$output" == *"Using local extensions/chat-only.ts"* ]] || [[ "$output" == *"Fetched chat-only"* ]]
+  # extension should still be installed and non-empty via fallback (real file, not fixture)
+  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  [ -s "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  grep -q "chat-only-state" "$HOME/.pi/agent/extensions/chat-only.ts"
+}
+
+@test "extension is re-installed on second run and overwrites correctly" {
+  run_setup
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only.ts" ]
+  # modify installed file to simulate old version
+  echo "// old version" > "$HOME/.pi/agent/extensions/chat-only.ts"
+  grep -q "old version" "$HOME/.pi/agent/extensions/chat-only.ts"
+  # second run should overwrite with fixture content
+  run bash "$PROJECT_ROOT/setup.sh"
+  [ "$status" -eq 0 ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only.ts"
+  ! grep -q "old version" "$HOME/.pi/agent/extensions/chat-only.ts"
 }
