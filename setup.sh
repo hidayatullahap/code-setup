@@ -55,22 +55,39 @@ else
 fi
 
 echo "==> Installing extensions..."
-mkdir -p "$HOME/.pi/agent/extensions/chat-only"
-if [ -s "$CLONE_DIR/extensions/chat-only/chat-only.js" ]; then
-  cp "$CLONE_DIR/extensions/chat-only/chat-only.js" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
-  echo "Installed chat-only extension to \$HOME/.pi/agent/extensions/chat-only/chat-only.js (from clone)"
+# Prefer the standalone installer if present in the clone (keeps logic in one place)
+if [ -s "$CLONE_DIR/install-extensions.sh" ]; then
+  echo "  Using clone's install-extensions.sh..."
+  bash "$CLONE_DIR/install-extensions.sh" --from-clone "$CLONE_DIR"
 else
-  echo "Warning: extensions/chat-only/chat-only.js not found in clone ($CLONE_DIR), skipping" >&2
-fi
+  # Fallback: inline install (covers older clones / tests that stub without the script)
+  mkdir -p "$HOME/.pi/agent/extensions/chat-only"
+  if [ -s "$CLONE_DIR/extensions/chat-only/chat-only.js" ]; then
+    cp "$CLONE_DIR/extensions/chat-only/chat-only.js" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+    echo "Installed chat-only extension to \$HOME/.pi/agent/extensions/chat-only/chat-only.js (from clone)"
+  else
+    echo "Warning: extensions/chat-only/chat-only.js not found in clone ($CLONE_DIR), skipping" >&2
+  fi
 
-echo "==> Installing generate-design extension..."
-GD_DEST="$HOME/.pi/agent/extensions/generate-design"
-if [ -d "$CLONE_DIR/extensions/generate-design" ]; then
-  mkdir -p "$GD_DEST"
-  cp -r "$CLONE_DIR/extensions/generate-design/"* "$GD_DEST/"
-  echo "Installed generate-design extension to $GD_DEST/ (from clone)"
-else
-  echo "Warning: extensions/generate-design not found in clone ($CLONE_DIR), skipping" >&2
+  echo "==> Installing generate-design extension..."
+  GD_DEST="$HOME/.pi/agent/extensions/generate-design"
+  if [ -d "$CLONE_DIR/extensions/generate-design" ]; then
+    mkdir -p "$GD_DEST"
+    # cp -a preserves skills/ subdir; fall back to cp -r with glob for minimal shells
+    if cp -a "$CLONE_DIR/extensions/generate-design/." "$GD_DEST/" 2>/dev/null; then
+      :
+    else
+      cp -r "$CLONE_DIR/extensions/generate-design/." "$GD_DEST/" 2>/dev/null || cp -r "$CLONE_DIR/extensions/generate-design/"* "$GD_DEST/" 2>/dev/null || true
+    fi
+    if [ -d "$GD_DEST/skills" ]; then
+      echo "Installed generate-design extension to $GD_DEST/ ($(ls -1 "$GD_DEST/skills" 2>/dev/null | wc -l | tr -d ' ') skill(s), from clone)"
+    else
+      echo "Installed generate-design extension to $GD_DEST/ (from clone)" >&2
+      echo "Warning: $GD_DEST/skills not found after copy — extension will use built-in fallbacks" >&2
+    fi
+  else
+    echo "Warning: extensions/generate-design not found in clone ($CLONE_DIR), skipping" >&2
+  fi
 fi
 
 echo "==> Appending AGENTS.md..."

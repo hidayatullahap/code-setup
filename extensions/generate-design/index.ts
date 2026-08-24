@@ -65,13 +65,19 @@ function getProjectRoot(): string {
   try {
     const thisDir = dirname(fileURLToPath(import.meta.url));
     const candidates = [
-      resolve(thisDir, "../../.."), // .pi/extensions/generate-design -> repo root
+      resolve(thisDir, "../../.."), // .pi/extensions/generate-design -> ~/.pi or repo root
       resolve(thisDir, ".."), // extension/ -> repo root
       resolve(thisDir, "../.."), // alternative depth
       process.cwd(),
     ];
     for (const c of candidates) {
-      if (existsSync(join(c, "skills", "design-workflow.md")) || existsSync(join(c, "manifest.json"))) return c;
+      if (
+        existsSync(join(c, "skills", "design-workflow.md")) ||
+        existsSync(join(c, "extensions/generate-design/skills/design-workflow.md")) ||
+        existsSync(join(c, "manifest.json")) ||
+        existsSync(join(c, "extensions/generate-design/manifest.json"))
+      )
+        return c;
     }
     return process.cwd();
   } catch {
@@ -80,19 +86,20 @@ function getProjectRoot(): string {
 }
 
 function readSkill(name: string): string {
-  // Prefer bundled skills next to the extension (for global install), then project root
+  // Prefer bundled skills next to the extension (for global install), then project-root variants
   try {
     const extensionDir = dirname(fileURLToPath(import.meta.url));
     const bundled = join(extensionDir, "skills", name);
     if (existsSync(bundled)) return stripFrontmatter(readFileSync(bundled, "utf8")).trim();
   } catch {}
   const root = getProjectRoot();
-  const p = join(root, "skills", name);
-  try {
-    return stripFrontmatter(readFileSync(p, "utf8")).trim();
-  } catch {
-    return FALLBACKS[name] ?? "";
+  const candidates = [join(root, "skills", name), join(root, "extensions/generate-design/skills", name)];
+  for (const p of candidates) {
+    try {
+      if (existsSync(p)) return stripFrontmatter(readFileSync(p, "utf8")).trim();
+    } catch {}
   }
+  return FALLBACKS[name] ?? "";
 }
 
 function readDesignMdHead(cwd: string, limit = 4000): string | null {
@@ -357,9 +364,18 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.on("session_start", async (_event, ctx) => {
-    // Cheap health hint, not noisy: only notify once per session
-    const root = getProjectRoot();
-    const skillsOk = existsSync(join(root, "skills", "design-workflow.md"));
+    // Health hint — check bundled location first (global install), then project-root fallbacks
+    let skillsOk = false;
+    try {
+      const extensionDir = dirname(fileURLToPath(import.meta.url));
+      if (existsSync(join(extensionDir, "skills", "design-workflow.md"))) skillsOk = true;
+    } catch {}
+    if (!skillsOk) {
+      const root = getProjectRoot();
+      skillsOk =
+        existsSync(join(root, "skills", "design-workflow.md")) ||
+        existsSync(join(root, "extensions/generate-design/skills/design-workflow.md"));
+    }
     if (!skillsOk) {
       ctx.ui.notify("generate-design: skills/ not found at expected location — using built-in fallbacks.", "warning");
     }
