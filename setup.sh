@@ -7,10 +7,12 @@ AGENTS_MARKER="# code-setup AGENTS.md"
 TMP_AGENTS=""
 TMP_SUBAGENTS=""
 TMP_MERGED=""
+TMP_EXT=""
 cleanup() {
   if [ -n "$TMP_AGENTS" ]; then rm -f "$TMP_AGENTS" 2>/dev/null || true; fi
   if [ -n "$TMP_SUBAGENTS" ]; then rm -f "$TMP_SUBAGENTS" 2>/dev/null || true; fi
   if [ -n "$TMP_MERGED" ]; then rm -f "$TMP_MERGED" 2>/dev/null || true; fi
+  if [ -n "$TMP_EXT" ]; then rm -f "$TMP_EXT" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
@@ -39,6 +41,50 @@ EOF
   echo "Created \$HOME/.pi/agent/vision.json (opencode-go/gpt-5.6-luna)"
 else
   echo "vision.json already exists, skipping"
+fi
+
+echo "==> Installing extensions..."
+mkdir -p "$HOME/.pi/agent/extensions"
+EXT_URL="$REPO_ROOT/extensions/chat-only.ts"
+TMP_EXT="$(mktemp)"
+EXT_SRC=""
+
+if curl -fsSL "$EXT_URL" -o "$TMP_EXT" 2>/dev/null && [ -s "$TMP_EXT" ]; then
+  EXT_SRC="$TMP_EXT"
+  echo "Fetched chat-only.ts from $EXT_URL"
+else
+  # Local fallback for git-clone installs
+  _src="${BASH_SOURCE[0]:-}"
+  if [ -n "$_src" ] && [ "$_src" != "bash" ] && [ "$_src" != "-" ]; then
+    if ! SCRIPT_DIR_EXT="$(cd "$(dirname "$_src")" 2>/dev/null && pwd)"; then
+      SCRIPT_DIR_EXT="$(pwd)"
+    fi
+  else
+    SCRIPT_DIR_EXT="$(pwd)"
+  fi
+  if [ -f "$SCRIPT_DIR_EXT/extensions/chat-only.ts" ]; then
+    EXT_SRC="$SCRIPT_DIR_EXT/extensions/chat-only.ts"
+    echo "Using local extensions/chat-only.ts at $EXT_SRC"
+    # Copy content to TMP_EXT so later logic is uniform, but keep EXT_SRC for direct cp
+    # Clean up the empty TMP_EXT we created for the curl attempt
+    rm -f "$TMP_EXT" 2>/dev/null || true
+    TMP_EXT=""
+  else
+    rm -f "$TMP_EXT" 2>/dev/null || true
+    TMP_EXT=""
+  fi
+fi
+
+if [ -z "$EXT_SRC" ] || [ ! -f "$EXT_SRC" ]; then
+  echo "Warning: extensions/chat-only.ts not found (tried $EXT_URL and local file), skipping" >&2
+else
+  cp "$EXT_SRC" "$HOME/.pi/agent/extensions/chat-only.ts"
+  echo "Installed chat-only extension to \$HOME/.pi/agent/extensions/chat-only.ts"
+  # Clean up TMP_EXT if it was the source
+  if [ -n "$TMP_EXT" ] && [ "$EXT_SRC" = "$TMP_EXT" ]; then
+    rm -f "$TMP_EXT" 2>/dev/null || true
+    TMP_EXT=""
+  fi
 fi
 
 echo "==> Appending AGENTS.md..."
