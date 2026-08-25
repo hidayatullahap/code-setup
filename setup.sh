@@ -37,6 +37,7 @@ pi install npm:@juicesharp/rpiv-ask-user-question
 pi install npm:@narumitw/pi-btw
 pi install npm:@narumitw/pi-plan-mode
 pi install npm:vision-handoff
+pi install npm:pi-gmi-cloud
 
 # single setup for all agent files – simpler than repeating mkdir -p
 mkdir -p "$HOME/.pi/agent"
