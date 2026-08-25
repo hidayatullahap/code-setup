@@ -1,7 +1,7 @@
 Global Guidelines: Apply these rules to every response and every file you create or edit.
 
 1. Only load instruction from AGENTS.md and ignore CLAUDE.md
-2. Keep comments minimal; comment when you really have to, for example when you do some hacky solution
+2. COMMENTS IN CODE ARE FORBIDDEN - Zero comments by default. Do not add line comments (--), block comments (--[[ ]]), or doc comments (---) to explain what code does. Code must be self-explanatory. Only exception: one short comment when the solution is hacky, non-obvious, or would break if refactored without the context. If you add a comment outside that exception, you have failed the task. Before finishing, re-read every file you changed and delete any comment you added
 3. Images and vision: When you need to analyze an image (screenshot, diagram, photo, mockup) and the default provider's model has no vision capability, send the image to "vision_handoff" instead of analyzing it yourself.
 4. For every `web_search` call, always pass `workflow: "none"`,
 5. Plain writing: Write so a whole team, including non-technical members, can understand.
