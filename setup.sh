@@ -7,12 +7,34 @@ AGENTS_MARKER="# code-setup AGENTS.md"
 
 CLONE_DIR=""
 TMP_MERGED=""
+TMP_WEB_KEYS=""  # Temp file to store web search keys from setup-web-search.sh
 cleanup() {
   if [ -n "$CLONE_DIR" ] && [ -d "$CLONE_DIR" ]; then rm -rf "$CLONE_DIR" 2>/dev/null || true; fi
   if [ -n "$TMP_MERGED" ]; then rm -f "$TMP_MERGED" 2>/dev/null || true; fi
+  if [ -n "${TMP_WEB_KEYS:-}" ]; then rm -f "$TMP_WEB_KEYS" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
+echo "==> Configuring web search API keys..."
+echo ""
+echo "This step is optional. You can press Enter without selecting any to skip."
+echo ""
+
+# Create temp file to pass keys from setup-web-search.sh to this script
+TMP_WEB_KEYS=$(mktemp)
+export TMP_WEB_KEYS
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "$SCRIPT_DIR/setup-web-search.sh" ]; then
+  bash "$SCRIPT_DIR/setup-web-search.sh"
+else
+  echo "Warning: setup-web-search.sh not found, skipping" >&2
+fi
+
+# Unset to prevent child processes from seeing it
+unset TMP_WEB_KEYS
+
+echo ""
 echo "==> Cloning code-setup repo..."
 if ! command -v git >/dev/null 2>&1; then
   echo "Error: git is required but not found. Install git first (e.g. sudo apt-get install -y git) and re-run setup." >&2
@@ -146,7 +168,19 @@ else
   fi
 fi
 
+echo "==> Writing web search keys to config..."
+if [ -n "${TMP_WEB_KEYS:-}" ] && [ -s "$TMP_WEB_KEYS" ]; then
+  WEB_SEARCH_FILE="$HOME/.pi/web-search.json"
+  mkdir -p "$(dirname "$WEB_SEARCH_FILE")"
+  mv "$TMP_WEB_KEYS" "$WEB_SEARCH_FILE"
+  echo "  Saved to $WEB_SEARCH_FILE"
+else
+  rm -f "${TMP_WEB_KEYS:-}" 2>/dev/null || true
+  echo "  No keys configured, skipping web-search.json"
+fi
+
 echo "==> Done. Installed packages:"
 pi list
 cat "$HOME/.pi/agent/vision.json" 2>/dev/null || true
 cat "$HOME/.pi/agent/settings.json" 2>/dev/null || true
+cat "$HOME/.pi/web-search.json" 2>/dev/null || true
