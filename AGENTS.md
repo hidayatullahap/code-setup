@@ -14,3 +14,4 @@ Global Guidelines: Apply these rules to every response and every file you create
     - Never hard-code absolute paths like `/home/...` or `/Users/...`. They work only on one machine and break the code for everyone else.
     - Always use relative paths, resolved from the current working directory, or from the project root when the file's location is clear (e.g. `config/settings.json`).
     - When a path must vary, read it from an environment variable, a config file, or a command-line argument instead of embedding a fixed value.
+5. Only load instruction from AGENTS.md and ignore CLAUDE.md
