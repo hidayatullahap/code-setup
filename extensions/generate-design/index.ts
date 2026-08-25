@@ -26,8 +26,9 @@ const FALLBACKS: Record<string, string> = {
   "design-workflow.md": `# Workflow
 1. Understand — infer deliverable, audience, tone, density.
 2. Read DESIGN.md if present — it is a constraint.
-3. Pre-flight (silent) — decide audience, posture, content beats, palette, type ladder.
-4. Write the complete index.html in one pass: real content, no placeholders, no "coming soon".
+3. Propose — post a structured design direction in chat before writing HTML.
+   Wait for user confirmation. No HTML during this phase.
+4. Implement — write the complete index.html in one pass.
 5. Self-check against craft-polish, fix, then finish.
 Never paste HTML into chat; the file is the deliverable.`,
   "html-output-rules.md": `# Output contract
@@ -40,11 +41,11 @@ Never paste HTML into chat; the file is the deliverable.`,
   "anti-slop.md": `# Anti-slop
 Bans + substitutions: no Inter/Roboto/Arial/Helvetica/Space Grotesk primary; no purple-on-white gradients or Tailwind blue/grays as whole scale; no symmetric 3-col card grids as only idea; no solid white/flat gray, no gray rectangles as images, no emoji as icons; no lorem/John Doe/Acme, no hotlinked stock photos.`,
   "design-commitment.md": `# Commit to ONE direction + DESIGN.md baton
-Pick one direction (minimal/editorial, bold/campaign, dense/professional, etc.) and execute it fully. Few strong tokens beat many weak ones. DESIGN.md carries style across runs: read it before writing, create/update it after with frontmatter + Overview/Colors/Typography/Spacing & Radius.`,
+Pick one direction (minimal/editorial, bold/campaign, dense/professional, etc.) and execute it fully. Few strong tokens beat many weak ones. DESIGN.md carries the approved design plan across runs: read it before writing, create/update it after with frontmatter + Overview/Design Direction/Colors/Typography/Spacing & Radius.`,
   "craft-polish.md": `# Craft polish — final self-check
 Interactive minimum (every control does something), three-state feedback (hover/press/focus, two cues, no size change on hover), craft surplus (3+ details), motion <300ms on transform/opacity only, empty/loading/error states, cleanup (no TODO/lorem/fake names).`,
   "revision-tweaks.md": `# Revision mode
-Re-read index.html before editing. Minimum coherent change via :root tokens when persistent, scoped styles for one-offs. Keep DESIGN.md truthful when palette/type/spacing shifts. Scope guard: vague "make it pop" is a fresh-run redesign, not a patch.`,
+Re-read index.html before editing. Minimum coherent change via :root tokens when persistent, scoped styles for one-offs. Keep DESIGN.md truthful when palette/type/spacing shifts. Scope guard: if a request is vague ("make it pop"), ask the user to clarify intent before proceeding.`,
 };
 
 // ---------------------------------------------------------------------------
@@ -142,6 +143,9 @@ function extractTokens(html: string): Set<string> {
 export default function (pi: ExtensionAPI) {
   let pendingPhaseOverride: "fresh" | "tweak" | null = null;
   let pendingCheckSummary: string | null = null;
+  // Tracks whether Phase 2 (plan proposal) has been injected this fresh run.
+  // Reset after index.html is written so the next fresh run starts clean.
+  let planPhaseInjected = false;
 
   // --- design_check tool ---
   pi.registerTool({
@@ -228,7 +232,8 @@ export default function (pi: ExtensionAPI) {
     description: "Force the next turn to use fresh-run prompt composition",
     handler: async (_args, ctx) => {
       pendingPhaseOverride = "fresh";
-      ctx.ui.notify("Next turn will use fresh-run composition (workflow + output rules + anti-slop + commitment + polish).", "info");
+      planPhaseInjected = false;
+      ctx.ui.notify("Next turn will use fresh-run composition with plan phase.", "info");
     },
   });
 
@@ -248,6 +253,10 @@ export default function (pi: ExtensionAPI) {
     const autoFresh = !indexExists;
     const isFresh = pendingPhaseOverride ? pendingPhaseOverride === "fresh" : autoFresh;
     if (pendingPhaseOverride) pendingPhaseOverride = null;
+
+    // Only inject Phase 2 on the first fresh turn of this run.
+    // Subsequent turns in the same session pick up where they left off.
+    const shouldInjectPlanPhase = isFresh && !planPhaseInjected;
 
     const workflow = readSkill("design-workflow.md");
     const outputRules = readSkill("html-output-rules.md");
@@ -273,6 +282,16 @@ export default function (pi: ExtensionAPI) {
       composed += `## Anti-slop (bans + substitutions)\n${antiSlop}\n\n`;
       composed += `## Design Commitment & DESIGN.md baton\n${commitment}\n\n`;
       composed += `## Craft Polish — self-check before finishing\n${polish}\n`;
+
+      if (shouldInjectPlanPhase) {
+        composed += `\n**Important — Plan first, then implement.**\n`;
+        composed += `Phase 2 (Propose) of the workflow above is mandatory. Post the structured design proposal in chat before writing any HTML. Wait for the user to confirm or revise it. Do not write index.html until the plan is confirmed.\n`;
+        planPhaseInjected = true;
+      } else if (planPhaseInjected) {
+        composed += `\n**Plan phase note:** You have already proposed a direction. `;
+        composed += `If the user has confirmed the plan, proceed to Phase 3 (implement). If the plan is still under discussion, continue refining it until confirmed.\n`;
+      }
+
       composed += `\nTweaks on follow-up turns use freeform natural language ("make the hero warmer") — no EDITMODE blocks. After you finish writing index.html, create or update DESIGN.md with the tokens you chose so the next page inherits the system.\n`;
     } else {
       composed += `\n\n# generate-design — Tweak / revision turn\n\n`;
@@ -345,6 +364,9 @@ export default function (pi: ExtensionAPI) {
     if (hasError || findings.length > 0) {
       pendingCheckSummary = `Static design_check after last index.html write:\n\`\`\`\n${report}\n\`\`\``;
     }
+
+    // Reset plan-phase gate so the next fresh run starts with Phase 2 again.
+    planPhaseInjected = false;
 
     // Patch the tool result so the model sees the check in the same turn.
     // tool_result handlers chain; we return a partial patch.

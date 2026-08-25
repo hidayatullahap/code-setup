@@ -28,21 +28,28 @@ border, primary accent, radius, two fonts.
 
 ## DESIGN.md is the baton
 
-`DESIGN.md` carries style across runs. There are no shared components; the
-file IS the consistency mechanism.
+`DESIGN.md` carries the approved design plan across runs. There are no shared
+components; the file IS the consistency mechanism.
+
+The baton stores the complete design direction the user confirmed:
+audience, tone, visual direction, palette, typography, content beats, and
+layout approach — not just raw token values.
 
 **Before writing:** if `DESIGN.md` exists in the workspace, read it and adopt
-its colors, typography, spacing, radius, and tone exactly. It wins over your
-own taste.
+its direction exactly. It wins over your own taste.
 
-**After finishing:** create or update `DESIGN.md` with frontmatter:
+**After finishing:** create or update `DESIGN.md` with frontmatter and a
+record of the approved design:
 
 ```md
 ---
 name: Project Design System
 ---
 ## Overview
-(one paragraph: audience, tone, direction)
+(audience, tone, visual direction — one paragraph)
+
+## Design Direction (confirmed plan)
+(What the user confirmed in Phase 2: audience, direction, beats, layout)
 
 ## Colors
 (tokens with values)
@@ -57,5 +64,12 @@ name: Project Design System
 Add any new stable decision made this run (a new token, a component pattern
 that worked). Reuse existing token names; never rename silently.
 
-If a user tweak shifts a stable decision (palette change, font swap), update
-`DESIGN.md` to match in the same pass.
+If a user tweak shifts a stable visual decision — palette shift, font swap,
+spacing scale change — update `DESIGN.md` in the same pass so the next page
+inherits what the user actually approved, not the older system.
+
+## Plan phase (fresh runs)
+
+On a fresh run, the confirmed plan lives in DESIGN.md once the user approves
+it. The plan itself (as Markdown) is the reference the model reads on tweak
+turns, so the baton is always grounded in an approved direction, not a draft.

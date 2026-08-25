@@ -4,6 +4,14 @@ set -euo pipefail
 # Web search API key configuration
 # Can be run standalone or called from setup.sh
 
+# Guard: skip interactive prompts in non-interactive / CI / test environments.
+# tty -s exits 0 when stdin IS a TTY, 1 when it is not.
+# This must be checked before any variable setup that depends on interactive mode.
+if ! tty -s 2>/dev/null; then
+  echo "  Skipping web search setup (non-interactive environment)."
+  exit 0
+fi
+
 # When called from setup.sh, keys are written to TMP_WEB_KEYS (env var)
 # Otherwise, writes directly to web-search.json
 WEB_SEARCH_FILE="${HOME}/.pi/web-search.json"

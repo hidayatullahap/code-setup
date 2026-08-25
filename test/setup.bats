@@ -391,6 +391,60 @@ EOS
   [ -f "$HOME/.pi/agent/extensions/generate-design/index.ts" ] || [ -f "$HOME/.pi/agent/extensions/generate-design/manifest.json" ]
 }
 
+@test "generate-design skill files are installed" {
+  run_setup
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.pi/agent/extensions/generate-design/skills/design-workflow.md" ]
+  [ -f "$HOME/.pi/agent/extensions/generate-design/skills/revision-tweaks.md" ]
+  [ -f "$HOME/.pi/agent/extensions/generate-design/skills/design-commitment.md" ]
+  [ -f "$HOME/.pi/agent/extensions/generate-design/skills/anti-slop.md" ]
+  [ -f "$HOME/.pi/agent/extensions/generate-design/skills/craft-polish.md" ]
+  [ -f "$HOME/.pi/agent/extensions/generate-design/skills/html-output-rules.md" ]
+}
+
+@test "generate-design workflow skill has three-phase structure (local source)" {
+  # Check the local source files (what was just changed), not the clone.
+  # The clone will be updated on next push; this catches drift during development.
+  [ -f "$PROJECT_ROOT/extensions/generate-design/skills/design-workflow.md" ]
+  grep -q "Phase 1" "$PROJECT_ROOT/extensions/generate-design/skills/design-workflow.md"
+  grep -q "Phase 2" "$PROJECT_ROOT/extensions/generate-design/skills/design-workflow.md"
+  grep -q "Phase 3" "$PROJECT_ROOT/extensions/generate-design/skills/design-workflow.md"
+  # Phase 2 must prohibit writing HTML during the proposal phase
+  grep -q "Do not write index.html" "$PROJECT_ROOT/extensions/generate-design/skills/design-workflow.md"
+  grep -q "Proposed Design Direction" "$PROJECT_ROOT/extensions/generate-design/skills/design-workflow.md"
+}
+
+@test "generate-design index.ts has planPhaseInjected gate" {
+  run_setup
+  [ "$status" -eq 0 ]
+  grep -q "planPhaseInjected" "$HOME/.pi/agent/extensions/generate-design/index.ts"
+  grep -q "shouldInjectPlanPhase" "$HOME/.pi/agent/extensions/generate-design/index.ts"
+}
+
+@test "generate-design revision-tweaks has vague-request section" {
+  run_setup
+  [ "$status" -eq 0 ]
+  grep -q "Vague requests" "$HOME/.pi/agent/extensions/generate-design/skills/revision-tweaks.md"
+  grep -q "ask for intent" "$HOME/.pi/agent/extensions/generate-design/skills/revision-tweaks.md"
+  grep -q "small targeted change" "$HOME/.pi/agent/extensions/generate-design/skills/revision-tweaks.md"
+  grep -q "full redesign" "$HOME/.pi/agent/extensions/generate-design/skills/revision-tweaks.md"
+}
+
+@test "generate-design design-commitment explains plan baton" {
+  run_setup
+  [ "$status" -eq 0 ]
+  grep -q "approved design plan" "$HOME/.pi/agent/extensions/generate-design/skills/design-commitment.md"
+  grep -q "Design Direction" "$HOME/.pi/agent/extensions/generate-design/skills/design-commitment.md"
+}
+
+@test "generate-design README documents plan-then-implement flow (local source)" {
+  # Check the local README so this test works offline and during development.
+  [ -f "$PROJECT_ROOT/extensions/generate-design/README.md" ]
+  grep -q "Plan-then-implement" "$PROJECT_ROOT/extensions/generate-design/README.md"
+  grep -q "Phase 2" "$PROJECT_ROOT/extensions/generate-design/README.md"
+  grep -qi "no blind implementation" "$PROJECT_ROOT/extensions/generate-design/README.md"
+}
+
 @test "missing git binary fails fast with helpful message" {
   # hide git
   mkdir -p "$TEST_TMP/nogit-bin"
