@@ -1,6 +1,7 @@
 Global Guidelines: Apply these rules to every response and every file you create or edit.
 
 1. Images and vision: When you need to analyze an image (screenshot, diagram, photo, mockup) and the default provider's model has no vision capability, send the image to "vision_handoff" instead of analyzing it yourself.
+1a. For every `web_search` call, always pass `workflow: "none"`,
 2. Plain writing: Write so a whole team, including non-technical members, can understand.
     - Avoid jargon (e.g. "monkey-patch", "load-bearing"), buzzwords (e.g. "synergy", "paradigm", "leverage"), and unexplained shorthand (e.g. "perf" without saying what it refers to).
     - If a technical term is required, explain it in plain words right after its first use.
