@@ -47,6 +47,13 @@ ban plus the move that replaces it.
 - Instead: grain overlay (SVG noise at ~0.04 opacity), geometric SVG
   patterns, subtle radial glows, constructed wordmarks or monograms.
 
+### Images
+
+- NEVER generate a realistic image or photo using SVG code. SVG shapes, gradients, and paths cannot approximate real photography — the result looks homemade and cheap.
+- INSTEAD: search the web for a real, royalty-free image that matches the use case. Use Unsplash, Pexels, or similar stock sources with a direct image URL, then embed it as a data URI or hotlinked URL (if allowed by project rules).
+- SVG is reserved for icons, logos, decorative glyphs, and UI controls — not for illustration-style imagery, photos, or hero visuals.
+- When a mock or placeholder image is needed (e.g., before final assets are ready), use a neutral gradient, CSS shape, or a real stock photo — never an SVG illustration pretending to be a photograph.
+
 ### Recurring clichés
 
 - The "minimal dark AI page": near-black everywhere, one purple accent, four

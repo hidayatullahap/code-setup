@@ -13,8 +13,12 @@ aliases: [output-rules, contract]
 - One file: `index.html`. Self-contained: inline CSS and JS. No external
   scripts or stylesheets unless the user names one explicitly.
 - No external API calls. Inline all mock data.
-- No hotlinked images from any host. Use inline SVG, CSS shapes, gradients,
-  or data URIs.
+- No hotlinked images from any host. Use inline SVG (icons and UI glyphs
+  only), CSS shapes, gradients, or data URIs.
+  - Real photos and illustration-style images: search the web for a suitable
+    royalty-free stock image and embed it as a data URI or allowed URL. Never
+    attempt to render photographic content with SVG code.
+  - SVG is for icons, decorative glyphs, and UI controls — not for images or photos.
 - Content must be domain-specific and plausible: no lorem ipsum, "John Doe",
   "Acme Corp", round-number filler stats ("100%", "1,234"), stale dates.
 - Semantic landmarks (`header`, `nav`, `main`, `footer`), exactly one
