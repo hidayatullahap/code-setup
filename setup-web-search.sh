@@ -53,19 +53,6 @@ KEY_JSON_NAMES["bocha"]="bochaApiKey"
 KEY_JSON_NAMES["perplexity"]="perplexityApiKey"
 KEY_JSON_NAMES["gemini"]="geminiApiKey"
 
-declare -A HINTS
-HINTS["openai"]="sk-..."
-HINTS["brave"]="BSA_..."
-HINTS["exa"]="exa-..."
-HINTS["tinyfish"]="sk-tinyfish-..."
-HINTS["search1api"]="..."
-HINTS["searchinfinity"]="..."
-HINTS["querit"]="..."
-HINTS["jina"]="jina_..."
-HINTS["bocha"]="sk-..."
-HINTS["perplexity"]="pplx-..."
-HINTS["gemini"]="AIza..."
-
 # Build ordered key list
 KEYS_ORDERED=(
   "openai"
@@ -142,7 +129,6 @@ KEYS_JSON="{"
 FIRST=true
 
 for key in $SELECTED_KEYS; do
-  hint="${HINTS[$key]:-...}"
   read -rp "  ${PROVIDERS[$key]}: " value < "$READ_FROM"
 
   if [ -n "$value" ]; then

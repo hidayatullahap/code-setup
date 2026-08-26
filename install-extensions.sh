@@ -16,11 +16,10 @@ set -euo pipefail
 
 SRC_DIR=""
 DEST_DIR="${HOME}/.pi/agent/extensions"
-FROM_CLONE=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
-    --from-clone) FROM_CLONE="${2:-}"; SRC_DIR="${2:-}"; shift 2 ;;
+    --from-clone) SRC_DIR="${2:-}"; shift 2 ;;
     --source) SRC_DIR="${2:-}"; shift 2 ;;
     --dest) DEST_DIR="${2:-}"; shift 2 ;;
     -h|--help)
@@ -31,7 +30,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-# Resolve source dir — FROM_CLONE wins, else script dir, else cwd
+# Resolve source dir — explicit --from-clone/--source wins, else script dir, else cwd
 if [ -z "$SRC_DIR" ]; then
   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   # Script lives at repo root; extensions/ is sibling
@@ -92,5 +91,5 @@ else
   echo "         Looked at: $GD_SRC" >&2
 fi
 
-echo "==> Extensions installed. Verify with: pi list && ls -R \"$DEST_DIR\""
-ls -R "$DEST_DIR" 2>/dev/null | head -n 80 || true
+echo "==> Extensions installed. Verify with: pi list && find \"$DEST_DIR\" -maxdepth 3"
+find "$DEST_DIR" -maxdepth 3 2>/dev/null | head -n 80 || true

@@ -27,7 +27,7 @@ TMP_WEB_KEYS=$(mktemp)
 export TMP_WEB_KEYS
 
 # BASH_SOURCE is empty when the script is piped into bash (curl ... | bash), so fall back to $0
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || SCRIPT_DIR="$PWD"
 if [ -f "$SCRIPT_DIR/setup-web-search.sh" ]; then
   bash "$SCRIPT_DIR/setup-web-search.sh"
 elif command -v curl >/dev/null 2>&1; then
@@ -50,18 +50,24 @@ unset TMP_WEB_KEYS
 
 echo ""
 echo "==> Configuring git global user (optional)..."
+GIT_TERMINAL="/dev/stdin"
+if ! tty -s 2>/dev/null && (: < /dev/tty) 2>/dev/null; then
+  GIT_TERMINAL="/dev/tty"
+fi
 if ! command -v git >/dev/null 2>&1; then
   echo "Warning: git not found, skipping git config" >&2
+elif ! { tty -s 2>/dev/null || (: < /dev/tty) 2>/dev/null; }; then
+  echo "Skipping git config (non-interactive environment)."
 else
   printf "Set git config --global user.email/name? [y/N]: "
-  read -r GIT_REPLY
+  read -r GIT_REPLY < "$GIT_TERMINAL" || GIT_REPLY=""
   case "$GIT_REPLY" in
     [yY]|[yY][eE][sS])
       printf "Email [%s]: " "hidayatullahap@gmail.com"
-      read -r GIT_EMAIL
+      read -r GIT_EMAIL < "$GIT_TERMINAL" || GIT_EMAIL=""
       GIT_EMAIL="${GIT_EMAIL:-hidayatullahap@gmail.com}"
       printf "Name [%s]: " "Hidayatullah Agung Prasetyo"
-      read -r GIT_NAME
+      read -r GIT_NAME < "$GIT_TERMINAL" || GIT_NAME=""
       GIT_NAME="${GIT_NAME:-Hidayatullah Agung Prasetyo}"
       git config --global user.email "$GIT_EMAIL"
       git config --global user.name "$GIT_NAME"
