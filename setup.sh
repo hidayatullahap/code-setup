@@ -133,10 +133,12 @@ else
   # Fallback: inline install (covers older clones / tests that stub without the script)
   mkdir -p "$HOME/.pi/agent/extensions/chat-only"
   if [ -s "$CLONE_DIR/extensions/chat-only/chat-only.js" ]; then
-    cp "$CLONE_DIR/extensions/chat-only/chat-only.js" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
-    echo "Installed chat-only extension to \$HOME/.pi/agent/extensions/chat-only/chat-only.js (from clone)"
+    cp "$CLONE_DIR/extensions/chat-only/chat-only.js" "$HOME/.pi/agent/extensions/chat-only/index.js"
+    rm -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" 2>/dev/null || true
+    echo "Installed chat-only extension to \$HOME/.pi/agent/extensions/chat-only/index.js (from clone)"
   else
     echo "Warning: extensions/chat-only/chat-only.js not found in clone ($CLONE_DIR), skipping" >&2
+    rm -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" 2>/dev/null || true
   fi
 
   echo "==> Installing generate-design extension..."

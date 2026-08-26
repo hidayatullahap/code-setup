@@ -51,10 +51,11 @@ mkdir -p "$DEST_DIR"
 # ---- chat-only ----
 echo "==> Installing chat-only extension..."
 CHAT_SRC="$SRC_DIR/extensions/chat-only/chat-only.js"
-CHAT_DEST="$DEST_DIR/chat-only/chat-only.js"
+CHAT_DEST="$DEST_DIR/chat-only/index.js"
 mkdir -p "$(dirname "$CHAT_DEST")"
 if [ -s "$CHAT_SRC" ]; then
   cp "$CHAT_SRC" "$CHAT_DEST"
+  rm -f "$DEST_DIR/chat-only/chat-only.js" 2>/dev/null || true
   echo "    Installed chat-only -> $CHAT_DEST (from $CHAT_SRC)"
 else
   echo "Warning: extensions/chat-only/chat-only.js not found in source ($SRC_DIR), skipping" >&2
