@@ -148,6 +148,15 @@ esac
 EOS
   chmod +x "$FAKE_BIN/git"
 
+  # curl stub – setup.sh only needs curl when run piped and setup-web-search.sh
+  # is missing locally. Failing by default simulates offline; tests override.
+  cat > "$FAKE_BIN/curl" <<'EOS'
+#!/usr/bin/env bash
+echo "curl $*" >> "$FAKE_LOG"
+exit 1
+EOS
+  chmod +x "$FAKE_BIN/curl"
+
   export GIT_SCENARIO="success"
   export CURL_SCENARIO="success"
 }
@@ -443,6 +452,43 @@ EOS
   grep -q "Plan-then-implement" "$PROJECT_ROOT/extensions/generate-design/README.md"
   grep -q "Phase 2" "$PROJECT_ROOT/extensions/generate-design/README.md"
   grep -qi "no blind implementation" "$PROJECT_ROOT/extensions/generate-design/README.md"
+}
+
+@test "piped install survives missing setup-web-search.sh (no unbound BASH_SOURCE)" {
+  RUN_DIR="$(mktemp -d)"
+  run bash -c "cd '$RUN_DIR' && cat '$PROJECT_ROOT/setup.sh' | bash"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+  [[ "$output" == *"could not download setup-web-search.sh"* ]]
+  [[ "$output" != *"Downloading setup-web-search.sh"* ]] || true
+  # install itself completed despite the skipped web search step
+  [ -f "$HOME/.pi/agent/settings.json" ]
+  grep -q "muse-spark" "$HOME/.pi/agent/settings.json"
+  rm -rf "$RUN_DIR"
+}
+
+@test "piped install downloads and runs setup-web-search.sh when absent locally" {
+  RUN_DIR="$(mktemp -d)"
+  STUB_WEB_SEARCH="$RUN_DIR/stub-web-search.sh"
+  cat > "$STUB_WEB_SEARCH" <<'EOS'
+#!/usr/bin/env bash
+echo "stub web search executed"
+exit 0
+EOS
+  cat > "$FAKE_BIN/curl" <<EOS
+#!/usr/bin/env bash
+echo "curl \$*" >> "\$FAKE_LOG"
+DEST="\${@: -1}"
+cp "$STUB_WEB_SEARCH" "\$DEST"
+exit 0
+EOS
+  chmod +x "$FAKE_BIN/curl"
+  run bash -c "cd '$RUN_DIR' && cat '$PROJECT_ROOT/setup.sh' | bash"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Downloading setup-web-search.sh"* ]]
+  [[ "$output" == *"stub web search executed"* ]]
+  [ -f "$HOME/.pi/agent/settings.json" ]
+  rm -rf "$RUN_DIR"
 }
 
 @test "missing git binary fails fast with helpful message" {

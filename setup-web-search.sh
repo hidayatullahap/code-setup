@@ -4,10 +4,15 @@ set -euo pipefail
 # Web search API key configuration
 # Can be run standalone or called from setup.sh
 
-# Guard: skip interactive prompts in non-interactive / CI / test environments.
-# tty -s exits 0 when stdin IS a TTY, 1 when it is not.
-# This must be checked before any variable setup that depends on interactive mode.
-if ! tty -s 2>/dev/null; then
+# Guard: skip interactive prompts when no terminal is reachable.
+# In CI there is neither a TTY on stdin nor an openable /dev/tty; when piped
+# (curl ... | bash) stdin is the download pipe but /dev/tty still works.
+READ_FROM="/dev/stdin"
+if tty -s 2>/dev/null; then
+  :
+elif (: < /dev/tty) 2>/dev/null; then
+  READ_FROM="/dev/tty"
+else
   echo "  Skipping web search setup (non-interactive environment)."
   exit 0
 fi
@@ -96,7 +101,7 @@ SELECTED_KEYS=""
 
 while true; do
   show_menu
-  read -rp "  Choice: " choice
+  read -rp "  Choice: " choice < "$READ_FROM"
 
   # Handle "a" for all
   if [ "$choice" = "a" ] || [ "$choice" = "A" ]; then
@@ -138,7 +143,7 @@ FIRST=true
 
 for key in $SELECTED_KEYS; do
   hint="${HINTS[$key]:-...}"
-  read -rp "  ${PROVIDERS[$key]}: " value
+  read -rp "  ${PROVIDERS[$key]}: " value < "$READ_FROM"
 
   if [ -n "$value" ]; then
     if [ "$FIRST" = true ]; then

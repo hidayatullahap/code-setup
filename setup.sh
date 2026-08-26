@@ -8,10 +8,12 @@ AGENTS_MARKER="# code-setup AGENTS.md"
 CLONE_DIR=""
 TMP_MERGED=""
 TMP_WEB_KEYS=""  # Temp file to store web search keys from setup-web-search.sh
+TMP_WEB_SCRIPT=""  # Temp copy of setup-web-search.sh when the script runs via curl | bash
 cleanup() {
   if [ -n "$CLONE_DIR" ] && [ -d "$CLONE_DIR" ]; then rm -rf "$CLONE_DIR" 2>/dev/null || true; fi
   if [ -n "$TMP_MERGED" ]; then rm -f "$TMP_MERGED" 2>/dev/null || true; fi
   if [ -n "${TMP_WEB_KEYS:-}" ]; then rm -f "$TMP_WEB_KEYS" 2>/dev/null || true; fi
+  if [ -n "${TMP_WEB_SCRIPT:-}" ]; then rm -f "$TMP_WEB_SCRIPT" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
@@ -24,15 +26,52 @@ echo ""
 TMP_WEB_KEYS=$(mktemp)
 export TMP_WEB_KEYS
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# BASH_SOURCE is empty when the script is piped into bash (curl ... | bash), so fall back to $0
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || pwd)"
 if [ -f "$SCRIPT_DIR/setup-web-search.sh" ]; then
   bash "$SCRIPT_DIR/setup-web-search.sh"
+elif command -v curl >/dev/null 2>&1; then
+  RAW_URL="$(printf '%s' "$REPO_URL" | sed 's#github\.com#raw.githubusercontent.com#; s#\.git$##')/$REPO_BRANCH/setup-web-search.sh"
+  echo "Downloading setup-web-search.sh..."
+  TMP_WEB_SCRIPT="$(mktemp)"
+  if curl -fsSL "$RAW_URL" -o "$TMP_WEB_SCRIPT"; then
+    bash "$TMP_WEB_SCRIPT"
+  else
+    echo "Warning: could not download setup-web-search.sh, skipping web search setup" >&2
+    rm -f "$TMP_WEB_SCRIPT"
+    TMP_WEB_SCRIPT=""
+  fi
 else
-  echo "Warning: setup-web-search.sh not found, skipping" >&2
+  echo "Warning: setup-web-search.sh not found and curl unavailable, skipping web search setup" >&2
 fi
 
 # Unset to prevent child processes from seeing it
 unset TMP_WEB_KEYS
+
+echo ""
+echo "==> Configuring git global user (optional)..."
+if ! command -v git >/dev/null 2>&1; then
+  echo "Warning: git not found, skipping git config" >&2
+else
+  printf "Set git config --global user.email/name? [y/N]: "
+  read -r GIT_REPLY
+  case "$GIT_REPLY" in
+    [yY]|[yY][eE][sS])
+      printf "Email [%s]: " "hidayatullahap@gmail.com"
+      read -r GIT_EMAIL
+      GIT_EMAIL="${GIT_EMAIL:-hidayatullahap@gmail.com}"
+      printf "Name [%s]: " "Hidayatullah Agung Prasetyo"
+      read -r GIT_NAME
+      GIT_NAME="${GIT_NAME:-Hidayatullah Agung Prasetyo}"
+      git config --global user.email "$GIT_EMAIL"
+      git config --global user.name "$GIT_NAME"
+      echo "Set git user.email=$GIT_EMAIL and user.name=$GIT_NAME"
+      ;;
+    *)
+      echo "Skipped git config"
+      ;;
+  esac
+fi
 
 echo ""
 echo "==> Cloning code-setup repo..."
