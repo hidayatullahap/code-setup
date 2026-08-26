@@ -127,6 +127,32 @@ function isIndexHtmlPath(cwd: string, rawPath: string): boolean {
   return basename(abs).toLowerCase() === "index.html";
 }
 
+function isDesignRelevant(prompt: string | undefined, cwd: string, hasOverride: boolean): boolean {
+  if (hasOverride) return true;
+  const raw = (prompt ?? "").trim();
+  if (!raw) return false;
+  const lower = raw.toLowerCase();
+  if (/index\.html|design\.md/i.test(lower)) return true;
+  if (/\/design-(check|new|tweak)/i.test(lower)) return true;
+  if (/(roblox|\blua\b|\bobby\b|leaderstats|replicatedstorage|\bdatastore\b|game\.pass)/i.test(raw) && !/(html|css|\bweb\b|landing|portfolio|website)/i.test(raw)) {
+    return false;
+  }
+  const webSignal =
+    /(html|css|tailwind|javascript|\bjs\b|\bts\b|typescript|web\s*page|landing\s*page|portfolio|website|web\s*site|web\s*app|single[-\s]?page|frontend|figma|mockup|wireframe|dashboard)/i;
+  if (webSignal.test(raw)) return true;
+  if (/(create|build|make|generate|design)\b[^]{0,40}\b(page|site|landing|portfolio|dashboard)\b/i.test(raw)) return true;
+  if (/\bdesign\b.*\b(page|landing|portfolio|system|token|palette|typography|layout)\b/i.test(raw)) return true;
+  if (/\bui\b.*\b(design|page|component|layout|hero)\b/i.test(raw)) return true;
+  const hasIndex = existsSync(resolve(cwd, "index.html"));
+  if (hasIndex) {
+    const tweakSignal =
+      /(hero|header|footer|\bnav\b|card|grid|palette|color|spacing|radius|font|typography|section|layout|responsive|background|gradient|make it pop|fresh look|new direction|redo the hero)/i;
+    if (tweakSignal.test(raw)) return true;
+    if (/make.*\b(warmer|darker|lighter|brighter|bolder|softer|sharper|pop)\b/i.test(raw)) return true;
+  }
+  return false;
+}
+
 // Lightweight :root token extraction for stale detection
 function extractTokens(html: string): Set<string> {
   const out = new Set<string>();
@@ -248,6 +274,12 @@ export default function (pi: ExtensionAPI) {
   // --- prompt composition ---
   pi.on("before_agent_start", async (event, ctx) => {
     const cwd = ctx.cwd;
+    const rawPrompt = (event as unknown as { prompt?: string; text?: string }).prompt ?? (event as unknown as { text?: string }).text ?? "";
+    const hasOverride = pendingPhaseOverride !== null;
+    if (!isDesignRelevant(rawPrompt, cwd, hasOverride)) {
+      if (hasOverride) pendingPhaseOverride = null;
+      return;
+    }
     const indexPath = resolve(cwd, "index.html");
     const indexExists = existsSync(indexPath);
     const autoFresh = !indexExists;
