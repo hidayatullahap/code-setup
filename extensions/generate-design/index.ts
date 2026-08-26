@@ -1,12 +1,9 @@
 /**
  * generate-design — pi extension for single-file HTML design generation.
  *
- * Composes the system prompt from skills/ per phase (fresh vs tweak),
- * exposes a static design_check tool, auto-runs the checker after
- * index.html writes, and warns when DESIGN.md is missing or stale.
- *
- * Placement: .pi/extensions/generate-design/index.ts (project-local,
- * auto-discovered). Also mirrored at extension/index.ts for reference.
+ * Mode-based: off by default, explicit /design to enter.
+ * Mirrors chat-only's mode pattern — status widget, persistence via custom entry,
+ * before_agent_start gates on the flag, and session_tree / session_start restore.
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -17,10 +14,7 @@ import { resolve, join, dirname, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkHtml, formatReport, designMdFindings } from "./checker.js";
 
-// ---------------------------------------------------------------------------
-// Fallback skill bodies (used when the file cannot be read from disk)
-// Keep them short; the real files are preferred. They carry the same intent
-// so the extension still steers taste even if the repo layout changed.
+const DESIGN_MODE_CUSTOM_TYPE = "generate-design-mode";
 
 const FALLBACKS: Record<string, string> = {
   "design-workflow.md": `# Workflow
@@ -48,9 +42,6 @@ Interactive minimum (every control does something), three-state feedback (hover/
 Re-read index.html before editing. Minimum coherent change via :root tokens when persistent, scoped styles for one-offs. Keep DESIGN.md truthful when palette/type/spacing shifts. Scope guard: if a request is vague ("make it pop"), ask the user to clarify intent before proceeding.`,
 };
 
-// ---------------------------------------------------------------------------
-// Helpers
-
 function stripFrontmatter(md: string): string {
   if (md.startsWith("---")) {
     const end = md.indexOf("\n---", 3);
@@ -66,9 +57,9 @@ function getProjectRoot(): string {
   try {
     const thisDir = dirname(fileURLToPath(import.meta.url));
     const candidates = [
-      resolve(thisDir, "../../.."), // .pi/extensions/generate-design -> ~/.pi or repo root
-      resolve(thisDir, ".."), // extension/ -> repo root
-      resolve(thisDir, "../.."), // alternative depth
+      resolve(thisDir, "../../.."),
+      resolve(thisDir, ".."),
+      resolve(thisDir, "../.."),
       process.cwd(),
     ];
     for (const c of candidates) {
@@ -87,7 +78,6 @@ function getProjectRoot(): string {
 }
 
 function readSkill(name: string): string {
-  // Prefer bundled skills next to the extension (for global install), then project-root variants
   try {
     const extensionDir = dirname(fileURLToPath(import.meta.url));
     const bundled = join(extensionDir, "skills", name);
@@ -120,40 +110,6 @@ function resolveIndexPath(cwd: string, inputPath?: string): string {
   return resolve(cwd, raw);
 }
 
-function isIndexHtmlPath(cwd: string, rawPath: string): boolean {
-  const cleaned = rawPath.trim().replace(/^@/, "");
-  if (!cleaned) return false;
-  const abs = resolve(cwd, cleaned);
-  return basename(abs).toLowerCase() === "index.html";
-}
-
-function isDesignRelevant(prompt: string | undefined, cwd: string, hasOverride: boolean): boolean {
-  if (hasOverride) return true;
-  const raw = (prompt ?? "").trim();
-  if (!raw) return false;
-  const lower = raw.toLowerCase();
-  if (/index\.html|design\.md/i.test(lower)) return true;
-  if (/\/design-(check|new|tweak)/i.test(lower)) return true;
-  if (/(roblox|\blua\b|\bobby\b|leaderstats|replicatedstorage|\bdatastore\b|game\.pass)/i.test(raw) && !/(html|css|\bweb\b|landing|portfolio|website)/i.test(raw)) {
-    return false;
-  }
-  const webSignal =
-    /(html|css|tailwind|javascript|\bjs\b|\bts\b|typescript|web\s*page|landing\s*page|portfolio|website|web\s*site|web\s*app|single[-\s]?page|frontend|figma|mockup|wireframe|dashboard)/i;
-  if (webSignal.test(raw)) return true;
-  if (/(create|build|make|generate|design)\b[^]{0,40}\b(page|site|landing|portfolio|dashboard)\b/i.test(raw)) return true;
-  if (/\bdesign\b.*\b(page|landing|portfolio|system|token|palette|typography|layout)\b/i.test(raw)) return true;
-  if (/\bui\b.*\b(design|page|component|layout|hero)\b/i.test(raw)) return true;
-  const hasIndex = existsSync(resolve(cwd, "index.html"));
-  if (hasIndex) {
-    const tweakSignal =
-      /(hero|header|footer|\bnav\b|card|grid|palette|color|spacing|radius|font|typography|section|layout|responsive|background|gradient|make it pop|fresh look|new direction|redo the hero)/i;
-    if (tweakSignal.test(raw)) return true;
-    if (/make.*\b(warmer|darker|lighter|brighter|bolder|softer|sharper|pop)\b/i.test(raw)) return true;
-  }
-  return false;
-}
-
-// Lightweight :root token extraction for stale detection
 function extractTokens(html: string): Set<string> {
   const out = new Set<string>();
   const blocks = [...html.matchAll(/:root\s*\{([^}]*)\}/gi)].map((m) => m[1]);
@@ -163,22 +119,98 @@ function extractTokens(html: string): Set<string> {
   return out;
 }
 
-// ---------------------------------------------------------------------------
-// Extension factory
+const DESIGN_INTENT_RE =
+  /(index\.html|design\.md|html|css|tailwind|landing\s*page|portfolio|website|web\s*app|single[-\s]?page|frontend|figma|mockup|wireframe|dashboard|hero|palette|typography)/i;
+
+function looksLikeDesignIntent(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (t.startsWith("/")) return false;
+  return DESIGN_INTENT_RE.test(t);
+}
 
 export default function (pi: ExtensionAPI) {
+  let designModeEnabled = false;
   let pendingPhaseOverride: "fresh" | "tweak" | null = null;
   let pendingCheckSummary: string | null = null;
-  // Tracks whether Phase 2 (plan proposal) has been injected this fresh run.
-  // Reset after index.html is written so the next fresh run starts clean.
   let planPhaseInjected = false;
 
-  // --- design_check tool ---
+  function validToolNames(names: string[]): string[] {
+    const all = new Set(pi.getAllTools().map((t) => t.name));
+    return names.filter((n) => all.has(n));
+  }
+
+  function persist() {
+    pi.appendEntry(DESIGN_MODE_CUSTOM_TYPE, {
+      enabled: designModeEnabled,
+      pendingPhaseOverride,
+      planPhaseInjected,
+    });
+  }
+
+  function updateStatus(ctx: { ui: { setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } }) {
+    if (designModeEnabled) {
+      ctx.ui.setStatus("generate-design", ctx.ui.theme.fg("accent", "🎨 design"));
+      ctx.ui.setWidget("generate-design", [
+        ctx.ui.theme.fg("muted", "Design mode — structured HTML generation. Run /design-off to exit."),
+      ]);
+    } else {
+      ctx.ui.setStatus("generate-design", undefined);
+      ctx.ui.setWidget("generate-design", undefined);
+    }
+  }
+
+  function restoreFromBranch(ctx: { sessionManager: { getBranch: () => unknown[] } }): boolean {
+    const branch = ctx.sessionManager.getBranch() as Array<{ type: string; customType?: string; data?: Record<string, unknown> }>;
+    let last: Record<string, unknown> | undefined;
+    for (const entry of branch) {
+      if (entry.type === "custom" && entry.customType === DESIGN_MODE_CUSTOM_TYPE) {
+        last = entry.data;
+      }
+    }
+    if (last) {
+      designModeEnabled = Boolean(last.enabled);
+      pendingPhaseOverride = (last.pendingPhaseOverride as "fresh" | "tweak" | null) ?? null;
+      planPhaseInjected = Boolean(last.planPhaseInjected);
+      return true;
+    }
+    return false;
+  }
+
+  function enableDesignMode(ctx: { ui: { notify: (m: string, t?: string) => void }; cwd: string } & { ui: { setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } }) {
+    if (designModeEnabled) {
+      ctx.ui.notify("Already in design mode.", "info");
+      return;
+    }
+    designModeEnabled = true;
+    planPhaseInjected = false;
+    const needed = ["read", "write", "edit", "bash"];
+    const active = new Set(pi.getActiveTools());
+    for (const n of needed) active.add(n);
+    const validated = validToolNames([...active] as string[]);
+    if (validated.length > 0) pi.setActiveTools(validated);
+    persist();
+    updateStatus(ctx as unknown as { ui: { setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } });
+    ctx.ui.notify("Design mode enabled. Structured HTML generation is now active. Run /design-off to exit.", "info");
+  }
+
+  function disableDesignMode(ctx: { ui: { notify: (m: string, t?: string) => void } } & { ui: { setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } }) {
+    if (!designModeEnabled) {
+      ctx.ui.notify("Design mode already off.", "info");
+      return;
+    }
+    designModeEnabled = false;
+    pendingPhaseOverride = null;
+    persist();
+    updateStatus(ctx as unknown as { ui: { setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } });
+    ctx.ui.notify("Design mode disabled. Back to normal chat.", "info");
+  }
+
   pi.registerTool({
     name: "design_check",
     label: "Design Check",
     description:
-      "Static checker for index.html against the generate-design rules (html-output-rules, anti-slop, craft-polish). No browser, no network. Use it to verify a fresh page or after a tweak turn; it also runs automatically after index.html writes.",
+      "Static checker for index.html against the generate-design rules (html-output-rules, anti-slop, craft-polish). No browser, no network. Use it to verify a fresh page or after a tweak turn; it also runs automatically after index.html writes when design mode is on.",
     parameters: Type.Object({
       path: Type.Optional(Type.String({ description: "Path to HTML file to check, relative to workspace. Defaults to index.html." })),
       strict: Type.Optional(Type.Boolean({ description: "If true, warnings are treated as errors in the summary. Defaults to false." })),
@@ -196,10 +228,7 @@ export default function (pi: ExtensionAPI) {
           details: { findings: [{ ruleId: "io-read-failed", severity: "error", message: msg }] },
         };
       }
-
       const findings = checkHtml(html);
-
-      // DESIGN.md staleness as an extra warn (only for index.html at cwd)
       if (basename(filePath).toLowerCase() === "index.html") {
         const designPath = resolve(ctx.cwd, "DESIGN.md");
         const designExists = existsSync(designPath);
@@ -208,10 +237,7 @@ export default function (pi: ExtensionAPI) {
         try {
           if (designExists) dMtime = statSync(designPath).mtimeMs;
           iMtime = statSync(filePath).mtimeMs;
-        } catch {
-          // ignore stat errors
-        }
-        // Heuristic: if index has tokens but DESIGN.md predates it, warn
+        } catch {}
         const hasTokens = extractTokens(html).size > 0;
         const designFinds = designMdFindings({
           designExists,
@@ -221,9 +247,7 @@ export default function (pi: ExtensionAPI) {
         });
         findings.push(...designFinds);
       }
-
       const report = formatReport(findings, label);
-      // Honor strict: just annotate, don't change findings — the caller decides
       const strictNote = params.strict && findings.some((f) => f.severity === "warn") ? "\n(strict: warnings would block)" : "";
       return {
         content: [{ type: "text", text: report + strictNote }],
@@ -232,7 +256,27 @@ export default function (pi: ExtensionAPI) {
     },
   });
 
-  // --- commands ---
+  pi.registerCommand("design", {
+    description: "Enter design mode (structured single-file HTML generation)",
+    handler: async (_args, ctx) => {
+      enableDesignMode(ctx as unknown as { ui: { notify: (m: string, t?: string) => void; setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } }; cwd: string });
+    },
+  });
+
+  pi.registerCommand("design-off", {
+    description: "Leave design mode",
+    handler: async (_args, ctx) => {
+      disableDesignMode(ctx as unknown as { ui: { notify: (m: string, t?: string) => void; setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } });
+    },
+  });
+
+  pi.registerCommand("design-status", {
+    description: "Show design mode status",
+    handler: async (_args, ctx) => {
+      ctx.ui.notify(designModeEnabled ? "Design mode: ON — /design-off to exit." : "Design mode: OFF — /design to enter.", "info");
+    },
+  });
+
   pi.registerCommand("design-check", {
     description: "Run the static design checker on index.html (or a given path)",
     handler: async (args, ctx) => {
@@ -255,39 +299,45 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("design-new", {
-    description: "Force the next turn to use fresh-run prompt composition",
+    description: "Force the next turn to use fresh-run composition (only in design mode)",
     handler: async (_args, ctx) => {
+      if (!designModeEnabled) {
+        ctx.ui.notify("Design mode is off. Run /design first, then /design-new.", "warning");
+        return;
+      }
       pendingPhaseOverride = "fresh";
       planPhaseInjected = false;
+      persist();
       ctx.ui.notify("Next turn will use fresh-run composition with plan phase.", "info");
     },
   });
 
   pi.registerCommand("design-tweak", {
-    description: "Force the next turn to use tweak-turn composition",
+    description: "Force the next turn to use tweak-turn composition (only in design mode)",
     handler: async (_args, ctx) => {
+      if (!designModeEnabled) {
+        ctx.ui.notify("Design mode is off. Run /design first, then /design-tweak.", "warning");
+        return;
+      }
       pendingPhaseOverride = "tweak";
+      persist();
       ctx.ui.notify("Next turn will use tweak-turn composition (revision-tweaks + output rules + anti-slop).", "info");
     },
   });
 
-  // --- prompt composition ---
   pi.on("before_agent_start", async (event, ctx) => {
+    if (!designModeEnabled) return;
+
     const cwd = ctx.cwd;
-    const rawPrompt = (event as unknown as { prompt?: string; text?: string }).prompt ?? (event as unknown as { text?: string }).text ?? "";
-    const hasOverride = pendingPhaseOverride !== null;
-    if (!isDesignRelevant(rawPrompt, cwd, hasOverride)) {
-      if (hasOverride) pendingPhaseOverride = null;
-      return;
-    }
     const indexPath = resolve(cwd, "index.html");
     const indexExists = existsSync(indexPath);
     const autoFresh = !indexExists;
     const isFresh = pendingPhaseOverride ? pendingPhaseOverride === "fresh" : autoFresh;
-    if (pendingPhaseOverride) pendingPhaseOverride = null;
+    if (pendingPhaseOverride) {
+      pendingPhaseOverride = null;
+      persist();
+    }
 
-    // Only inject Phase 2 on the first fresh turn of this run.
-    // Subsequent turns in the same session pick up where they left off.
     const shouldInjectPlanPhase = isFresh && !planPhaseInjected;
 
     const workflow = readSkill("design-workflow.md");
@@ -298,7 +348,6 @@ export default function (pi: ExtensionAPI) {
     const revision = readSkill("revision-tweaks.md");
     const designHead = readDesignMdHead(cwd);
 
-    // Pending check summary from previous write turn
     const injectedWarnings: string[] = [];
     if (pendingCheckSummary) {
       injectedWarnings.push(pendingCheckSummary);
@@ -307,7 +356,7 @@ export default function (pi: ExtensionAPI) {
 
     let composed = "";
     if (isFresh) {
-      composed += `\n\n# generate-design — Fresh page run\n\n`;
+      composed += `\n\n# generate-design — Fresh page run (design mode ON)\n\n`;
       composed += `You are generating a single self-contained index.html page. One page at a time, no multi-screen machinery.\n\n`;
       composed += `## Design Workflow\n${workflow}\n\n`;
       composed += `## HTML Output Rules (contract)\n${outputRules}\n\n`;
@@ -319,6 +368,7 @@ export default function (pi: ExtensionAPI) {
         composed += `\n**Important — Plan first, then implement.**\n`;
         composed += `Phase 2 (Propose) of the workflow above is mandatory. Post the structured design proposal in chat before writing any HTML. Wait for the user to confirm or revise it. Do not write index.html until the plan is confirmed.\n`;
         planPhaseInjected = true;
+        persist();
       } else if (planPhaseInjected) {
         composed += `\n**Plan phase note:** You have already proposed a direction. `;
         composed += `If the user has confirmed the plan, proceed to Phase 3 (implement). If the plan is still under discussion, continue refining it until confirmed.\n`;
@@ -326,7 +376,7 @@ export default function (pi: ExtensionAPI) {
 
       composed += `\nTweaks on follow-up turns use freeform natural language ("make the hero warmer") — no EDITMODE blocks. After you finish writing index.html, create or update DESIGN.md with the tokens you chose so the next page inherits the system.\n`;
     } else {
-      composed += `\n\n# generate-design — Tweak / revision turn\n\n`;
+      composed += `\n\n# generate-design — Tweak / revision turn (design mode ON)\n\n`;
       composed += `An index.html already exists. This is a follow-up edit turn. Do the minimum coherent change.\n\n`;
       composed += `## Revision Tweaks\n${revision}\n\n`;
       composed += `## HTML Output Rules (still enforced)\n${outputRules}\n\n`;
@@ -344,38 +394,28 @@ export default function (pi: ExtensionAPI) {
       composed += `\n## Post-write notices from previous turn\n${injectedWarnings.join("\n\n")}\n`;
     }
 
-    // Enforce: identity/bar-setting first, bans in middle, checklist last is already satisfied by order.
     const nextPrompt = (event.systemPrompt ?? "") + composed;
     return { systemPrompt: nextPrompt };
   });
 
-  // --- auto-run checker after index.html writes ---
   pi.on("tool_result", async (event, _ctx) => {
+    if (!designModeEnabled) return;
     const toolName = (event as unknown as { toolName: string }).toolName;
     if (toolName !== "write" && toolName !== "edit") return;
-
     const input = (event as unknown as { input: Record<string, unknown> }).input ?? {};
-    // write: { path, content }, edit: { path, edits }
     const rawPath = (input.path as string | undefined) ?? (input.file as string | undefined);
     if (!rawPath || basename(rawPath.replace(/^@/, "")).toLowerCase() !== "index.html") return;
-
-    // We don't have ctx.cwd on the event in all pi versions; fall back to process.cwd()
-    // Try to get cwd from the tool result's ctx if available via closure? pi.on passes ctx as second arg.
-    // Use the passed ctx for cwd.
     const ctx = _ctx as unknown as { cwd: string };
     const cwd = ctx?.cwd ?? process.cwd();
     const filePath = resolveIndexPath(cwd, rawPath);
     if (!existsSync(filePath)) return;
-
     let html: string;
     try {
       html = await readFile(filePath, "utf8");
     } catch {
       return;
     }
-
     const findings = checkHtml(html);
-    // Also fold in DESIGN.md baton staleness so auto-run matches manual design_check
     try {
       const cwd2 = (_ctx as unknown as { cwd: string })?.cwd ?? process.cwd();
       const designPath2 = resolve(cwd2, "DESIGN.md");
@@ -391,17 +431,11 @@ export default function (pi: ExtensionAPI) {
     } catch {}
     const hasError = findings.some((f) => f.severity === "error");
     const report = formatReport(findings, rawPath ?? "index.html");
-
-    // Stash summary for the next turn's prompt injection
     if (hasError || findings.length > 0) {
       pendingCheckSummary = `Static design_check after last index.html write:\n\`\`\`\n${report}\n\`\`\``;
     }
-
-    // Reset plan-phase gate so the next fresh run starts with Phase 2 again.
     planPhaseInjected = false;
-
-    // Patch the tool result so the model sees the check in the same turn.
-    // tool_result handlers chain; we return a partial patch.
+    persist();
     const patchText = `\n\n---\nStatic design_check (${rawPath}):\n${report}`;
     const existing = (event as unknown as { content: Array<{ type: string; text: string }> }).content;
     if (Array.isArray(existing) && existing.length > 0 && typeof existing[0].text === "string") {
@@ -410,15 +444,31 @@ export default function (pi: ExtensionAPI) {
         details: { ...(event as unknown as { details: Record<string, unknown> }).details, designCheckFindings: findings },
       };
     }
-    // Fallback if content shape is different
     return {
       content: [{ type: "text" as const, text: patchText }],
       details: { designCheckFindings: findings },
     };
   });
 
-  pi.on("session_start", async (_event, ctx) => {
-    // Health hint — check bundled location first (global install), then project-root fallbacks
+  pi.on("input", async (event, ctx) => {
+    if (designModeEnabled) return { action: "continue" as const };
+    if (!ctx.hasUI) return { action: "continue" as const };
+    if (ctx.mode !== "tui") return { action: "continue" as const };
+    const streaming = (event as unknown as { streamingBehavior?: string }).streamingBehavior;
+    if (streaming) return { action: "continue" as const };
+    const text = (event as unknown as { text?: string }).text ?? "";
+    if (!looksLikeDesignIntent(text)) return { action: "continue" as const };
+    const ok = await ctx.ui.confirm(
+      "Enable design mode?",
+      "Your message looks like HTML/design work (page, landing, hero, index.html). Enable design mode for this session?",
+    );
+    if (ok) {
+      enableDesignMode(ctx as unknown as { ui: { notify: (m: string, t?: string) => void; setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } }; cwd: string });
+    }
+    return { action: "continue" as const };
+  });
+
+  pi.on("session_start", async (event, ctx) => {
     let skillsOk = false;
     try {
       const extensionDir = dirname(fileURLToPath(import.meta.url));
@@ -432,6 +482,35 @@ export default function (pi: ExtensionAPI) {
     }
     if (!skillsOk) {
       ctx.ui.notify("generate-design: skills/ not found at expected location — using built-in fallbacks.", "warning");
+    }
+
+    const reason = (event as unknown as { reason?: string }).reason;
+    if (reason === "startup" || reason === "new") {
+      if (!restoreFromBranch(ctx as unknown as { sessionManager: { getBranch: () => unknown[] } })) {
+        designModeEnabled = false;
+        planPhaseInjected = false;
+      }
+      updateStatus(ctx as unknown as { ui: { setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } });
+      return;
+    }
+    restoreFromBranch(ctx as unknown as { sessionManager: { getBranch: () => unknown[] } });
+    updateStatus(ctx as unknown as { ui: { setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } });
+  });
+
+  pi.on("session_tree", async (_event, ctx) => {
+    restoreFromBranch(ctx as unknown as { sessionManager: { getBranch: () => unknown[] } });
+    updateStatus(ctx as unknown as { ui: { setStatus: (k: string, v: string | undefined) => void; setWidget: (k: string, v: string[] | undefined) => void; theme: { fg: (c: string, s: string) => string } } });
+  });
+
+  pi.on("turn_start", async () => {
+    if (designModeEnabled) {
+      const active = pi.getActiveTools();
+      const needed = ["read", "write", "edit", "bash"];
+      const missing = needed.filter((n) => !(active as string[]).includes(n));
+      if (missing.length > 0) {
+        const all = validToolNames([...(active as string[]), ...missing]);
+        if (all.length > 0) pi.setActiveTools(all);
+      }
     }
   });
 }

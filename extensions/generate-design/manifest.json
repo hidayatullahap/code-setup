@@ -1,41 +1,41 @@
 {
   "schemaVersion": 1,
   "name": "generate-design-skill",
-  "description": "Quality-steering skill pack for an HTML-only design generator: single index.html output, one page per run, freeform natural-language tweaks, DESIGN.md as cross-run consistency memory. Skills only inject for CSS/JS/HTML/UI intent (gated on prompt signals like html, css, page, landing, index.html); suppressed for non-web workflows such as Roblox Lua.",
+  "description": "Mode-based skill pack for an HTML-only design generator: /design to enter design mode (explicit, like /chat). When ON, every turn composes skills for single index.html output, one page per run, freeform tweaks, DESIGN.md baton. When OFF, no injection.",
   "source": "Distilled from Open CoDesign (https://github.com/OpenCoworkAI/open-codesign), MIT License — prompt sections packages/core/src/prompts/sections/*.md and skills apps/desktop/resources/templates/skills/{craft-polish,frontend-design-anti-slop,responsive-layout}.md",
   "license": "MIT",
   "targetOutput": "index.html (single self-contained file)",
   "activation": {
-    "mode": "conditional",
-    "when": "prompt indicates CSS/JS/HTML/UI work (keywords: html, css, index.html, DESIGN.md, page, landing, portfolio, website, hero, tailwind, frontend, etc.) or workspace tweak of existing index.html; suppressed for non-web tasks (e.g. Roblox Lua). Override with /design-new or /design-tweak.",
-    "blockedWhen": "prompt matches Roblox/Lua/game-script signals without web file refs"
+    "mode": "manual",
+    "when": "/design enters design mode (persists per session via custom entry generate-design-mode). When ON, every turn composes skills — fresh (workflow + output rules + anti-slop + commitment + polish + plan gate) or tweak (revision-tweaks + rules + anti-slop) based on index.html existence. Input that looks like design work nudges to enable. Exit with /design-off.",
+    "blockedWhen": "design mode OFF — no prompt injection and no trigger scanning (except a lightweight nudge). design_check tool and /design-check command remain available."
   },
   "composition": {
     "systemPromptAlways": [],
-    "systemPromptWhenRelevant": [
+    "systemPromptWhenDesignMode": [
       {
         "skill": "design-workflow.md",
-        "when": "inject only when isDesignRelevant(prompt, cwd) is true (html/css/page/landing/index.html) or /design-new forced; suppressed for non-web workflows"
+        "when": "design mode ON + fresh run (no index.html) — plan gate required before HTML"
       },
       {
         "skill": "html-output-rules.md",
-        "when": "same gate as design-workflow.md"
+        "when": "design mode ON — always (fresh and tweak)"
       },
       {
         "skill": "anti-slop.md",
-        "when": "same gate as design-workflow.md"
+        "when": "design mode ON — always"
       },
       {
         "skill": "design-commitment.md",
-        "when": "always include if workspace uses DESIGN.md and gate passed; otherwise include on first gated run so the file gets created"
+        "when": "design mode ON — inline DESIGN.md head as constraint; create/update after write"
       },
       {
         "skill": "craft-polish.md",
-        "when": "inject before the final self-check phase of each gated run"
+        "when": "design mode ON + fresh run — final self-check before finish"
       },
       {
         "skill": "revision-tweaks.md",
-        "when": "inject only on gated follow-up edit/tweak turns, replacing design-workflow.md step 4-5 emphasis"
+        "when": "design mode ON + tweak run (index.html exists) — minimum coherent change"
       }
     ]
   },
