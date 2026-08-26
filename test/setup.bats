@@ -186,10 +186,12 @@ run_setup() {
 @test "fresh install creates chat-only extension" {
   run_setup
   [ "$status" -eq 0 ]
-  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
-  grep -q "chat-only-state" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  [ -f "$HOME/.pi/agent/extensions/chat-only/index.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  grep -q "chat-only-state" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  [ ! -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
   [[ "$output" == *"chat-only"* ]] || [[ "$output" == *"extensions"* ]]
+  [[ "$output" == *"index.js"* ]] || [[ "$output" == *"from clone"* ]]
 }
 
 @test "second run is idempotent – AGENTS.md not duplicated" {
@@ -208,9 +210,10 @@ run_setup() {
   [ "$marker_after" -eq 1 ]
   # vision.json not overwritten
   grep -q "opencode-go" "$HOME/.pi/agent/vision.json"
-  # extension still present after second run
-  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  # extension still present after second run at new index.js path
+  [ -f "$HOME/.pi/agent/extensions/chat-only/index.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  [ ! -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
 }
 
 @test "merge preserves user customizations (user settings win)" {
@@ -267,8 +270,9 @@ EOF
   [ "$status" -eq 0 ]
   [ -f "$HOME/.pi/agent/settings.json" ]
   grep -q "muse-spark" "$HOME/.pi/agent/settings.json"
-  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  [ -f "$HOME/.pi/agent/extensions/chat-only/index.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  [ ! -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
   rm -rf "$TMP_RUN_DIR"
 }
 
@@ -342,8 +346,9 @@ EOS
   export GIT_SCENARIO="success"
   run_setup
   [ "$status" -eq 0 ]
-  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  [ -f "$HOME/.pi/agent/extensions/chat-only/index.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  [ ! -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
   [[ "$output" == *"from clone"* ]]
 }
 
@@ -353,7 +358,8 @@ EOS
   [ "$status" -eq 0 ]
   [[ "$output" == *"Warning"* ]]
   [[ "$output" == *"extensions/chat-only/chat-only.js not found"* ]]
-  # extension not created
+  # extension not created at new path either
+  [ ! -s "$HOME/.pi/agent/extensions/chat-only/index.js" ] || true
   [ ! -s "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ] || true
 }
 
@@ -363,34 +369,134 @@ EOS
   [ "$status" -eq 0 ]
   [[ "$output" == *"Warning"* ]]
   [[ "$output" == *"chat-only"* ]]
-  # extension should not be installed from empty file ( -s check )
+  # extension should not be installed from empty file ( -s check ) at either path
+  [ ! -s "$HOME/.pi/agent/extensions/chat-only/index.js" ] || true
   [ ! -s "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ] || true
 }
 
 @test "extension is re-installed on second run and overwrites correctly" {
   run_setup
   [ "$status" -eq 0 ]
-  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only/index.js" ]
   # modify installed file to simulate old version
-  echo "// old version" > "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
-  grep -q "old version" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
-  # second run should overwrite with fixture content
+  echo "// old version" > "$HOME/.pi/agent/extensions/chat-only/index.js"
+  grep -q "old version" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  # leave legacy file if present should be cleaned
+  touch "$HOME/.pi/agent/extensions/chat-only/chat-only.js" 2>/dev/null || true
+  # second run should overwrite with fixture content and clean legacy
   run bash "$PROJECT_ROOT/setup.sh"
   [ "$status" -eq 0 ]
-  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
-  ! grep -q "old version" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  ! grep -q "old version" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  [ ! -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
 }
 
 @test "chat-only extension defaults to tools enabled (/tools default, /chat manual)" {
   run_setup
   [ "$status" -eq 0 ]
-  [ -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only/index.js" ]
   # new sessions default to tools – chatModeEnabled must be false
-  grep -q "let chatModeEnabled = false" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
-  grep -q "Starts every session with tools enabled" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
-  grep -q "Every new session defaults to tools enabled" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  grep -q "let chatModeEnabled = false" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  grep -q "Starts every session with tools enabled" "$HOME/.pi/agent/extensions/chat-only/index.js"
+  grep -q "Every new session defaults to tools enabled" "$HOME/.pi/agent/extensions/chat-only/index.js"
   # chat-only is opt-in via /chat, not default
-  ! grep -q "Every new session defaults to chat-only" "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  ! grep -q "Every new session defaults to chat-only" "$HOME/.pi/agent/extensions/chat-only/index.js"
+}
+
+@test "chat-only installs to index.js and removes legacy chat-only.js (commit 1db1d2a)" {
+  run_setup
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only/index.js" ]
+  [ ! -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
+  [[ "$output" == *"index.js"* ]]
+  # simulate legacy file from old version exists before second run
+  cp "$HOME/.pi/agent/extensions/chat-only/index.js" "$TEST_TMP/expected.js"
+  echo "legacy" > "$HOME/.pi/agent/extensions/chat-only/chat-only.js"
+  run bash "$PROJECT_ROOT/setup.sh"
+  [ "$status" -eq 0 ]
+  [ -f "$HOME/.pi/agent/extensions/chat-only/index.js" ]
+  [ ! -f "$HOME/.pi/agent/extensions/chat-only/chat-only.js" ]
+  grep -q "Test fixture chat-only line" "$HOME/.pi/agent/extensions/chat-only/index.js"
+}
+
+@test "install-extensions.sh installs chat-only to index.js and cleans legacy file" {
+  TMP_SRC="$(mktemp -d)"
+  TMP_DEST="$(mktemp -d)"
+  mkdir -p "$TMP_SRC/extensions/chat-only"
+  mkdir -p "$TMP_SRC/extensions/generate-design/skills"
+  echo "// chat-only fixture" > "$TMP_SRC/extensions/chat-only/chat-only.js"
+  echo "{}" > "$TMP_SRC/extensions/generate-design/manifest.json"
+  echo "skill" > "$TMP_SRC/extensions/generate-design/skills/test.md"
+  mkdir -p "$TMP_DEST/chat-only"
+  echo "old" > "$TMP_DEST/chat-only/chat-only.js"
+  run bash "$PROJECT_ROOT/install-extensions.sh" --source "$TMP_SRC" --dest "$TMP_DEST"
+  [ "$status" -eq 0 ]
+  [ -f "$TMP_DEST/chat-only/index.js" ]
+  grep -q "chat-only fixture" "$TMP_DEST/chat-only/index.js"
+  [ ! -f "$TMP_DEST/chat-only/chat-only.js" ]
+  [[ "$output" == *"index.js"* ]]
+  rm -rf "$TMP_SRC" "$TMP_DEST"
+}
+
+@test "web search keys survive unset via SAVED_TMP_WEB_KEYS (commit 12dcccc)" {
+  # stub setup-web-search.sh to write keys to TMP_WEB_KEYS
+  STUB_DIR="$(mktemp -d)"
+  cat > "$STUB_DIR/setup-web-search.sh" <<'EOS'
+#!/usr/bin/env bash
+set -euo pipefail
+echo '{"openaiApiKey":"sk-test-123"}' > "$TMP_WEB_KEYS"
+echo "stub web-search wrote keys to $TMP_WEB_KEYS"
+EOS
+  chmod +x "$STUB_DIR/setup-web-search.sh"
+  # backup real setup-web-search.sh if present
+  REAL_WS="$PROJECT_ROOT/setup-web-search.sh"
+  BACKUP_WS=""
+  if [ -f "$REAL_WS" ]; then
+    BACKUP_WS="$(mktemp)"
+    cp "$REAL_WS" "$BACKUP_WS"
+  fi
+  cp "$STUB_DIR/setup-web-search.sh" "$REAL_WS"
+  run_setup
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+  [ -f "$HOME/.pi/web-search.json" ]
+  grep -q "sk-test-123" "$HOME/.pi/web-search.json"
+  grep -q "openaiApiKey" "$HOME/.pi/web-search.json"
+  [[ "$output" == *"Saved to"* ]]
+  # restore
+  if [ -n "$BACKUP_WS" ]; then
+    mv "$BACKUP_WS" "$REAL_WS"
+  else
+    rm -f "$REAL_WS"
+  fi
+  rm -rf "$STUB_DIR"
+}
+
+@test "setup.sh does not leave unbound variable when piped and web keys present" {
+  RUN_DIR="$(mktemp -d)"
+  STUB_WEB_SEARCH="$RUN_DIR/stub-web-search.sh"
+  cat > "$STUB_WEB_SEARCH" <<'EOS'
+#!/usr/bin/env bash
+echo '{"braveApiKey":"BSA_test"}' > "$TMP_WEB_KEYS"
+EOS
+  cat > "$FAKE_BIN/curl" <<EOS
+#!/usr/bin/env bash
+echo "curl \$*" >> "\$FAKE_LOG"
+DEST="\${@: -1}"
+cp "$STUB_WEB_SEARCH" "\$DEST"
+exit 0
+EOS
+  chmod +x "$FAKE_BIN/curl"
+  run bash -c "cd '$RUN_DIR' && cat '$PROJECT_ROOT/setup.sh' | bash"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"unbound variable"* ]]
+  rm -rf "$RUN_DIR"
+  cat > "$FAKE_BIN/curl" <<'EOS'
+#!/usr/bin/env bash
+echo "curl $*" >> "$FAKE_LOG"
+exit 1
+EOS
+  chmod +x "$FAKE_BIN/curl"
 }
 
 @test "generate-design extension is installed from clone" {
