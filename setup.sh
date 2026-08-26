@@ -8,11 +8,13 @@ AGENTS_MARKER="# code-setup AGENTS.md"
 CLONE_DIR=""
 TMP_MERGED=""
 TMP_WEB_KEYS=""  # Temp file to store web search keys from setup-web-search.sh
+SAVED_TMP_WEB_KEYS=""  # Preserved path after TMP_WEB_KEYS is unset
 TMP_WEB_SCRIPT=""  # Temp copy of setup-web-search.sh when the script runs via curl | bash
 cleanup() {
   if [ -n "$CLONE_DIR" ] && [ -d "$CLONE_DIR" ]; then rm -rf "$CLONE_DIR" 2>/dev/null || true; fi
   if [ -n "$TMP_MERGED" ]; then rm -f "$TMP_MERGED" 2>/dev/null || true; fi
   if [ -n "${TMP_WEB_KEYS:-}" ]; then rm -f "$TMP_WEB_KEYS" 2>/dev/null || true; fi
+  if [ -n "${SAVED_TMP_WEB_KEYS:-}" ]; then rm -f "$SAVED_TMP_WEB_KEYS" 2>/dev/null || true; fi
   if [ -n "${TMP_WEB_SCRIPT:-}" ]; then rm -f "$TMP_WEB_SCRIPT" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
@@ -45,7 +47,7 @@ else
   echo "Warning: setup-web-search.sh not found and curl unavailable, skipping web search setup" >&2
 fi
 
-# Unset to prevent child processes from seeing it
+SAVED_TMP_WEB_KEYS="$TMP_WEB_KEYS"
 unset TMP_WEB_KEYS
 
 echo ""
@@ -214,15 +216,18 @@ else
 fi
 
 echo "==> Writing web search keys to config..."
-if [ -n "${TMP_WEB_KEYS:-}" ] && [ -s "$TMP_WEB_KEYS" ]; then
+if [ -n "${SAVED_TMP_WEB_KEYS:-}" ] && [ -s "$SAVED_TMP_WEB_KEYS" ]; then
   WEB_SEARCH_FILE="$HOME/.pi/web-search.json"
   mkdir -p "$(dirname "$WEB_SEARCH_FILE")"
-  mv "$TMP_WEB_KEYS" "$WEB_SEARCH_FILE"
+  mv "$SAVED_TMP_WEB_KEYS" "$WEB_SEARCH_FILE"
+  SAVED_TMP_WEB_KEYS=""
   echo "  Saved to $WEB_SEARCH_FILE"
 else
-  rm -f "${TMP_WEB_KEYS:-}" 2>/dev/null || true
+  rm -f "${SAVED_TMP_WEB_KEYS:-}" 2>/dev/null || true
+  SAVED_TMP_WEB_KEYS=""
   echo "  No keys configured, skipping web-search.json"
 fi
+unset SAVED_TMP_WEB_KEYS 2>/dev/null || true
 
 echo "==> Done. Installed packages:"
 pi list
