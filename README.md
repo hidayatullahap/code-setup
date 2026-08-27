@@ -7,3 +7,7 @@ curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setu
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/install-extensions.sh | bash
 ```
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup-git-local.sh | bash
+```
