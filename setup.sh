@@ -7,15 +7,17 @@ AGENTS_MARKER="# code-setup AGENTS.md"
 
 CLONE_DIR=""
 TMP_MERGED=""
-TMP_WEB_KEYS=""  # Temp file to store web search keys from setup-web-search.sh
-SAVED_TMP_WEB_KEYS=""  # Preserved path after TMP_WEB_KEYS is unset
-TMP_WEB_SCRIPT=""  # Temp copy of setup-web-search.sh when the script runs via curl | bash
+TMP_WEB_KEYS=""       # Temp file to store web search keys from setup-web-search.sh
+SAVED_TMP_WEB_KEYS="" # Preserved path after TMP_WEB_KEYS is unset
+TMP_WEB_SCRIPT=""     # Temp copy of setup-web-search.sh when the script runs via curl | bash
+TMP_MODELS_SCRIPT=""  # Temp copy of setup-enabled-models.sh when the script runs via curl | bash
 cleanup() {
   if [ -n "$CLONE_DIR" ] && [ -d "$CLONE_DIR" ]; then rm -rf "$CLONE_DIR" 2>/dev/null || true; fi
   if [ -n "$TMP_MERGED" ]; then rm -f "$TMP_MERGED" 2>/dev/null || true; fi
   if [ -n "${TMP_WEB_KEYS:-}" ]; then rm -f "$TMP_WEB_KEYS" 2>/dev/null || true; fi
   if [ -n "${SAVED_TMP_WEB_KEYS:-}" ]; then rm -f "$SAVED_TMP_WEB_KEYS" 2>/dev/null || true; fi
   if [ -n "${TMP_WEB_SCRIPT:-}" ]; then rm -f "$TMP_WEB_SCRIPT" 2>/dev/null || true; fi
+  if [ -n "${TMP_MODELS_SCRIPT:-}" ]; then rm -f "$TMP_MODELS_SCRIPT" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
@@ -53,31 +55,31 @@ unset TMP_WEB_KEYS
 echo ""
 echo "==> Configuring git global user (optional)..."
 GIT_TERMINAL="/dev/stdin"
-if ! tty -s 2>/dev/null && (: < /dev/tty) 2>/dev/null; then
+if ! tty -s 2>/dev/null && (: </dev/tty) 2>/dev/null; then
   GIT_TERMINAL="/dev/tty"
 fi
 if ! command -v git >/dev/null 2>&1; then
   echo "Warning: git not found, skipping git config" >&2
-elif ! { tty -s 2>/dev/null || (: < /dev/tty) 2>/dev/null; }; then
+elif ! { tty -s 2>/dev/null || (: </dev/tty) 2>/dev/null; }; then
   echo "Skipping git config (non-interactive environment)."
 else
   printf "Set git config --global user.email/name? [y/N]: "
-  read -r GIT_REPLY < "$GIT_TERMINAL" || GIT_REPLY=""
+  read -r GIT_REPLY <"$GIT_TERMINAL" || GIT_REPLY=""
   case "$GIT_REPLY" in
-    [yY]|[yY][eE][sS])
-      printf "Email [%s]: " "hidayatullahap@gmail.com"
-      read -r GIT_EMAIL < "$GIT_TERMINAL" || GIT_EMAIL=""
-      GIT_EMAIL="${GIT_EMAIL:-hidayatullahap@gmail.com}"
-      printf "Name [%s]: " "Hidayatullah Agung Prasetyo"
-      read -r GIT_NAME < "$GIT_TERMINAL" || GIT_NAME=""
-      GIT_NAME="${GIT_NAME:-Hidayatullah Agung Prasetyo}"
-      git config --global user.email "$GIT_EMAIL"
-      git config --global user.name "$GIT_NAME"
-      echo "Set git user.email=$GIT_EMAIL and user.name=$GIT_NAME"
-      ;;
-    *)
-      echo "Skipped git config"
-      ;;
+  [yY] | [yY][eE][sS])
+    printf "Email [%s]: " "hidayatullahap@gmail.com"
+    read -r GIT_EMAIL <"$GIT_TERMINAL" || GIT_EMAIL=""
+    GIT_EMAIL="${GIT_EMAIL:-hidayatullahap@gmail.com}"
+    printf "Name [%s]: " "Hidayatullah Agung Prasetyo"
+    read -r GIT_NAME <"$GIT_TERMINAL" || GIT_NAME=""
+    GIT_NAME="${GIT_NAME:-Hidayatullah Agung Prasetyo}"
+    git config --global user.email "$GIT_EMAIL"
+    git config --global user.name "$GIT_NAME"
+    echo "Set git user.email=$GIT_EMAIL and user.name=$GIT_NAME"
+    ;;
+  *)
+    echo "Skipped git config"
+    ;;
   esac
 fi
 
@@ -114,7 +116,7 @@ mkdir -p "$HOME/.pi/agent"
 
 echo "==> Configuring vision handoff..."
 if [ ! -f "$HOME/.pi/agent/vision.json" ]; then
-  cat > "$HOME/.pi/agent/vision.json" <<'EOF'
+  cat >"$HOME/.pi/agent/vision.json" <<'EOF'
 {
   "provider": "opencode-go",
   "model": "gpt-5.6-luna"
@@ -170,7 +172,7 @@ if [ -s "$CLONE_DIR/AGENTS.md" ]; then
       echo ""
       echo "$AGENTS_MARKER"
       cat "$CLONE_DIR/AGENTS.md"
-    } >> "$HOME/.pi/agent/AGENTS.md"
+    } >>"$HOME/.pi/agent/AGENTS.md"
     echo "Appended AGENTS.md to \$HOME/.pi/agent/AGENTS.md"
   else
     echo "AGENTS.md already appended, skipping"
@@ -187,7 +189,7 @@ if [ ! -s "$SUBAGENTS_SRC" ]; then
   echo "Warning: subagents.json not found in clone ($CLONE_DIR), skipping" >&2
 else
   if [ ! -f "$SETTINGS_FILE" ] || [ ! -s "$SETTINGS_FILE" ]; then
-    echo "{}" > "$SETTINGS_FILE"
+    echo "{}" >"$SETTINGS_FILE"
   fi
 
   if ! command -v jq >/dev/null 2>&1; then
@@ -197,7 +199,7 @@ else
     if ! jq empty "$SETTINGS_FILE" 2>/dev/null; then
       echo "Warning: $SETTINGS_FILE is not valid JSON, backing up and resetting" >&2
       cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bak.$(date +%s)" 2>/dev/null || true
-      echo "{}" > "$SETTINGS_FILE"
+      echo "{}" >"$SETTINGS_FILE"
     fi
 
     if ! jq empty "$SUBAGENTS_SRC" 2>/dev/null; then
@@ -205,7 +207,7 @@ else
     else
       TMP_MERGED="$(mktemp)"
       # User settings win on conflict – reruns do not clobber custom models
-      if jq -s '.[0] * .[1]' "$SUBAGENTS_SRC" "$SETTINGS_FILE" > "$TMP_MERGED"; then
+      if jq -s '.[0] * .[1]' "$SUBAGENTS_SRC" "$SETTINGS_FILE" >"$TMP_MERGED"; then
         mv "$TMP_MERGED" "$SETTINGS_FILE"
         TMP_MERGED=""
         echo "Merged $SUBAGENTS_SRC into $SETTINGS_FILE (jq – user settings preserved)"
@@ -216,6 +218,24 @@ else
       fi
     fi
   fi
+fi
+
+echo "==> Configuring enabled models..."
+if [ -f "$SCRIPT_DIR/setup-enabled-models.sh" ]; then
+  bash "$SCRIPT_DIR/setup-enabled-models.sh"
+elif command -v curl >/dev/null 2>&1; then
+  RAW_MODELS_URL="$(printf '%s' "$REPO_URL" | sed 's#github\.com#raw.githubusercontent.com#; s#\.git$##')/$REPO_BRANCH/setup-enabled-models.sh"
+  echo "Downloading setup-enabled-models.sh..."
+  TMP_MODELS_SCRIPT="$(mktemp)"
+  if curl -fsSL "$RAW_MODELS_URL" -o "$TMP_MODELS_SCRIPT"; then
+    bash "$TMP_MODELS_SCRIPT"
+  else
+    echo "Warning: could not download setup-enabled-models.sh, skipping enabled models setup" >&2
+    rm -f "$TMP_MODELS_SCRIPT"
+    TMP_MODELS_SCRIPT=""
+  fi
+else
+  echo "Warning: setup-enabled-models.sh not found and curl unavailable, skipping enabled models setup" >&2
 fi
 
 echo "==> Writing web search keys to config..."

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SETTINGS_FILE="${SETTINGS_FILE:-$HOME/.pi/agent/settings.json}"
+
+MODELS_JSON='[
+  "opencode-go/glm-5.3-flash",
+  "opencode/hy3-free",
+  "opencode/mimo-v2.5-free",
+  "opencode/ling-3.0-flash-fin-free",
+  "opencode/muse-spark-1.2-contributor-free"
+]'
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "Warning: jq is required but not found, cannot update $SETTINGS_FILE" >&2
+  echo "Install jq first (e.g. sudo apt-get install -y jq)" >&2
+  exit 0
+fi
+
+mkdir -p "$(dirname "$SETTINGS_FILE")"
+if [ ! -s "$SETTINGS_FILE" ]; then
+  echo "{}" >"$SETTINGS_FILE"
+fi
+
+if ! jq empty "$SETTINGS_FILE" 2>/dev/null; then
+  echo "Warning: $SETTINGS_FILE is not valid JSON, backing up and resetting" >&2
+  cp "$SETTINGS_FILE" "${SETTINGS_FILE}.bak.$(date +%s)" 2>/dev/null || true
+  echo "{}" >"$SETTINGS_FILE"
+fi
+
+MERGED="$(jq --argjson models "$MODELS_JSON" '
+  .enabledModels = ((.enabledModels // []) + $models | unique)' "$SETTINGS_FILE")"
+
+if printf '%s' "$MERGED" | jq empty 2>/dev/null; then
+  printf '%s\n' "$MERGED" >"$SETTINGS_FILE"
+  echo "Merged enabledModels into $SETTINGS_FILE"
+else
+  echo "Warning: failed to merge enabledModels into $SETTINGS_FILE" >&2
+  exit 1
+fi

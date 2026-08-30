@@ -1,0 +1,9 @@
+{
+  "enabledModels": [
+    "opencode-go/glm-5.3-flash",
+    "opencode/hy3-free",
+    "opencode/ling-3.0-flash-fin-free",
+    "opencode/mimo-v2.5-free",
+    "opencode/muse-spark-1.2-contributor-free"
+  ]
+}
