@@ -33,13 +33,13 @@ export TMP_WEB_KEYS
 # BASH_SOURCE is empty when the script is piped into bash (curl ... | bash), so fall back to $0
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)" || SCRIPT_DIR="$PWD"
 if [ -f "$SCRIPT_DIR/setup-web-search.sh" ]; then
-  bash "$SCRIPT_DIR/setup-web-search.sh"
+  bash "$SCRIPT_DIR/setup-web-search.sh" || echo "Warning: setup-web-search.sh failed, skipping web search setup" >&2
 elif command -v curl >/dev/null 2>&1; then
   RAW_URL="$(printf '%s' "$REPO_URL" | sed 's#github\.com#raw.githubusercontent.com#; s#\.git$##')/$REPO_BRANCH/setup-web-search.sh"
   echo "Downloading setup-web-search.sh..."
   TMP_WEB_SCRIPT="$(mktemp)"
   if curl -fsSL "$RAW_URL" -o "$TMP_WEB_SCRIPT"; then
-    bash "$TMP_WEB_SCRIPT"
+    bash "$TMP_WEB_SCRIPT" || echo "Warning: downloaded setup-web-search.sh failed, skipping web search setup" >&2
   else
     echo "Warning: could not download setup-web-search.sh, skipping web search setup" >&2
     rm -f "$TMP_WEB_SCRIPT"
@@ -222,13 +222,13 @@ fi
 
 echo "==> Configuring enabled models..."
 if [ -f "$SCRIPT_DIR/setup-enabled-models.sh" ]; then
-  bash "$SCRIPT_DIR/setup-enabled-models.sh"
+  bash "$SCRIPT_DIR/setup-enabled-models.sh" || echo "Warning: setup-enabled-models.sh failed, skipping enabled models setup" >&2
 elif command -v curl >/dev/null 2>&1; then
   RAW_MODELS_URL="$(printf '%s' "$REPO_URL" | sed 's#github\.com#raw.githubusercontent.com#; s#\.git$##')/$REPO_BRANCH/setup-enabled-models.sh"
   echo "Downloading setup-enabled-models.sh..."
   TMP_MODELS_SCRIPT="$(mktemp)"
   if curl -fsSL "$RAW_MODELS_URL" -o "$TMP_MODELS_SCRIPT"; then
-    bash "$TMP_MODELS_SCRIPT"
+    bash "$TMP_MODELS_SCRIPT" || echo "Warning: downloaded setup-enabled-models.sh failed, skipping enabled models setup" >&2
   else
     echo "Warning: could not download setup-enabled-models.sh, skipping enabled models setup" >&2
     rm -f "$TMP_MODELS_SCRIPT"
