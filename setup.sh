@@ -104,6 +104,7 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 echo "==> Installing pi packages..."
 pi install npm:pi-web-access
 pi install npm:pi-subagents
+pi install npm:pi-mcp-adapter
 pi install npm:@juicesharp/rpiv-ask-user-question
 pi install npm:@narumitw/pi-btw
 pi install npm:@narumitw/pi-plan-mode
