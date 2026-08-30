@@ -26,34 +26,6 @@ if [ -n "${TMP_WEB_KEYS:-}" ]; then
   OUTPUT_FILE="$TMP_WEB_KEYS"
 fi
 
-# Define available providers
-declare -A PROVIDERS
-PROVIDERS["openai"]="OpenAI API Key  | sk-..."
-PROVIDERS["brave"]="Brave API Key    | BSA_..."
-PROVIDERS["exa"]="Exa API Key      | exa-..."
-PROVIDERS["tinyfish"]="TinyFish API Key | sk-tinyfish-..."
-PROVIDERS["search1api"]="Search1API Key   | ..."
-PROVIDERS["searchinfinity"]="SearchInfinity   | ..."
-PROVIDERS["querit"]="Querit API Key   | ..."
-PROVIDERS["jina"]="Jina API Key     | jina_..."
-PROVIDERS["bocha"]="Bocha API Key    | sk-..."
-PROVIDERS["perplexity"]="Perplexity Key   | pplx-..."
-PROVIDERS["gemini"]="Gemini API Key   | AIza..."
-
-declare -A KEY_JSON_NAMES
-KEY_JSON_NAMES["openai"]="openaiApiKey"
-KEY_JSON_NAMES["brave"]="braveApiKey"
-KEY_JSON_NAMES["exa"]="exaApiKey"
-KEY_JSON_NAMES["tinyfish"]="tinyfishApiKey"
-KEY_JSON_NAMES["search1api"]="search1apiApiKey"
-KEY_JSON_NAMES["searchinfinity"]="searchinfinityApiKey"
-KEY_JSON_NAMES["querit"]="queritApiKey"
-KEY_JSON_NAMES["jina"]="jinaApiKey"
-KEY_JSON_NAMES["bocha"]="bochaApiKey"
-KEY_JSON_NAMES["perplexity"]="perplexityApiKey"
-KEY_JSON_NAMES["gemini"]="geminiApiKey"
-
-# Build ordered key list
 KEYS_ORDERED=(
   "openai"
   "brave"
@@ -68,12 +40,46 @@ KEYS_ORDERED=(
   "gemini"
 )
 
+provider_label() {
+  case "$1" in
+    openai) echo "OpenAI API Key  | sk-..." ;;
+    brave) echo "Brave API Key    | BSA_..." ;;
+    exa) echo "Exa API Key      | exa-..." ;;
+    tinyfish) echo "TinyFish API Key | sk-tinyfish-..." ;;
+    search1api) echo "Search1API Key   | ..." ;;
+    searchinfinity) echo "SearchInfinity   | ..." ;;
+    querit) echo "Querit API Key   | ..." ;;
+    jina) echo "Jina API Key     | jina_..." ;;
+    bocha) echo "Bocha API Key    | sk-..." ;;
+    perplexity) echo "Perplexity Key   | pplx-..." ;;
+    gemini) echo "Gemini API Key   | AIza..." ;;
+    *) echo "$1" ;;
+  esac
+}
+
+provider_json_key() {
+  case "$1" in
+    openai) echo "openaiApiKey" ;;
+    brave) echo "braveApiKey" ;;
+    exa) echo "exaApiKey" ;;
+    tinyfish) echo "tinyfishApiKey" ;;
+    search1api) echo "search1apiApiKey" ;;
+    searchinfinity) echo "searchinfinityApiKey" ;;
+    querit) echo "queritApiKey" ;;
+    jina) echo "jinaApiKey" ;;
+    bocha) echo "bochaApiKey" ;;
+    perplexity) echo "perplexityApiKey" ;;
+    gemini) echo "geminiApiKey" ;;
+    *) echo "${1}ApiKey" ;;
+  esac
+}
+
 show_menu() {
   local i=1
   echo "  Select API key(s) to configure (comma-separated, e.g. 1,3,5) or 'a' for all:"
   echo ""
   for key in "${KEYS_ORDERED[@]}"; do
-    printf "  [%2d] %s\n" "$i" "${PROVIDERS[$key]}"
+    printf "  [%2d] %s\n" "$i" "$(provider_label "$key")"
     i=$((i+1))
   done
   echo ""
@@ -129,7 +135,8 @@ KEYS_JSON="{"
 FIRST=true
 
 for key in $SELECTED_KEYS; do
-  read -rp "  ${PROVIDERS[$key]}: " value < "$READ_FROM"
+  _label="$(provider_label "$key")"
+  read -rp "  $_label: " value < "$READ_FROM"
 
   if [ -n "$value" ]; then
     if [ "$FIRST" = true ]; then
@@ -137,7 +144,7 @@ for key in $SELECTED_KEYS; do
     else
       KEYS_JSON+=", "
     fi
-    json_name="${KEY_JSON_NAMES[$key]}"
+    json_name="$(provider_json_key "$key")"
     KEYS_JSON+="\"$json_name\": \"$value\""
   fi
 done
