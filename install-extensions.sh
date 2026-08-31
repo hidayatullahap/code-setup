@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# install-extensions.sh — install chat-only and generate-design pi extensions
+# install-extensions.sh — install chat-only, generate-design and kiosapi pi extensions
 #
 # Copies extension files from the repo (or from a cloned copy) into
 # $HOME/.pi/agent/extensions/ so pi can discover them.
@@ -90,6 +90,19 @@ if [ -d "$GD_SRC" ]; then
 else
   echo "Warning: extensions/generate-design not found in source ($SRC_DIR), skipping" >&2
   echo "         Looked at: $GD_SRC" >&2
+fi
+
+# ---- kiosapi ----
+echo "==> Installing kiosapi extension..."
+KIOS_SRC="$SRC_DIR/extensions/kiosapi/index.ts"
+KIOS_DEST="$DEST_DIR/kiosapi/index.ts"
+mkdir -p "$(dirname "$KIOS_DEST")"
+if [ -s "$KIOS_SRC" ]; then
+  cp "$KIOS_SRC" "$KIOS_DEST"
+  echo "    Installed kiosapi -> $KIOS_DEST (from $KIOS_SRC)"
+else
+  echo "Warning: extensions/kiosapi/index.ts not found in source ($SRC_DIR), skipping" >&2
+  echo "         Looked at: $KIOS_SRC" >&2
 fi
 
 echo "==> Extensions installed. Verify with: pi list && find \"$DEST_DIR\" -maxdepth 3"
