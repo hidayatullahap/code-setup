@@ -103,10 +103,8 @@ npm install -g --ignore-scripts @earendil-works/pi-coding-agent
 
 echo "==> Installing pi packages..."
 pi install npm:pi-web-access
-pi install npm:pi-subagents
 pi install npm:pi-mcp-adapter
 pi install npm:@juicesharp/rpiv-ask-user-question
-pi install npm:@narumitw/pi-btw
 pi install npm:@narumitw/pi-plan-mode
 pi install npm:vision-handoff
 pi install npm:pi-gmi-cloud
@@ -120,10 +118,10 @@ if [ ! -f "$HOME/.pi/agent/vision.json" ]; then
   cat >"$HOME/.pi/agent/vision.json" <<'EOF'
 {
   "provider": "opencode-go",
-  "model": "gpt-5.6-luna"
+  "model": "deepseek-v4-flash-vision-exp"
 }
 EOF
-  echo "Created \$HOME/.pi/agent/vision.json (opencode-go/gpt-5.6-luna)"
+  echo "Created \$HOME/.pi/agent/vision.json (opencode-go/deepseek-v4-flash-vision-exp)"
 else
   echo "vision.json already exists, skipping"
 fi
