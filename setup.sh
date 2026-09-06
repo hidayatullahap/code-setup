@@ -106,7 +106,7 @@ pi install npm:pi-web-access
 pi install npm:pi-mcp-adapter
 pi install npm:@juicesharp/rpiv-ask-user-question
 pi install npm:@janvitos/pi-plan-build
-pi install npm:@narumitw/pi-lsp
+pi install npm:pi-lens
 pi install npm:vision-handoff
 pi install npm:pi-gmi-cloud
 pi install npm:@aliou/pi-guardrails
