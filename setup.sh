@@ -110,6 +110,7 @@ pi install npm:pi-lens
 pi install npm:vision-handoff
 pi install npm:pi-gmi-cloud
 pi install npm:@aliou/pi-guardrails
+pi install npm:pi-blackhole
 
 # single setup for all agent files – simpler than repeating mkdir -p
 mkdir -p "$HOME/.pi/agent"
