@@ -1,12 +1,12 @@
 /**
  * Chat-Only Extension – Lazy Tool Loading
  *
- * Starts every session with tools enabled (/tools default). Chat-only
- * mode is opt-in via /chat: zero active tools, tiny system prompt, no
- * Available tools / Guidelines context. Tools load by default; /chat
- * disables them, /tools restores them.
+ * Starts every session with tools enabled (/tools default). Chat plus web
+ * mode is opt-in via /chat: only web lookup tools stay active, tiny system
+ * prompt, no Available tools / Guidelines context. Tools load by default;
+ * /chat keeps web lookup only, /tools restores them.
  *
- * Default is tools-enabled per session. /chat enters chat-only,
+ * Default is tools-enabled per session. /chat enters chat plus web,
  * /tools restores the previous tool set.
  *
  * Place as:
@@ -19,17 +19,18 @@ const CHAT_STATE_CUSTOM_TYPE = "chat-only-state";
 // Tiny prompt used when in chat-only mode (entered manually via /chat). ~10 lines, no tool descriptions.
 const TINY_CHAT_PROMPT = `You are pi, a helpful chat assistant.
 
-You are currently in CHAT-ONLY mode. You have NO tools available – no file access, no shell, no edits.
+You are currently in CHAT PLUS WEB mode. Web lookup (search and fetch) is available. File access, shell, and edits are off.
 
-- Answer conversationally and helpfully from your own knowledge.
-- Do NOT claim you can read files, run commands, browse, or edit code while in this mode.
-- If the user asks to read files, run commands, edit code, search the repo, or do anything needing tools, explain you are in chat-only mode and suggest they run /tools to enable tools for this session.
+- Answer conversationally and helpfully. Use web lookup when the user asks about links, docs, or current info.
+- Do NOT claim you can read local files, run commands, or edit code while in this mode.
+- If the user asks to read files, run commands, edit code, or search the repo, explain you are in chat plus web mode and suggest they run /tools to enable full tools for this session.
 - Keep replies concise unless the user asks for detail.`;
 
 // Very conservative intent detection – false positives go to a confirm dialog.
 const TOOL_INTENT_RE =
-  /\b(read|open|show|edit|write|create|update|modify|run|execute|bash|grep|search|find|ls|list files|cat|apply patch|check the repo|look at|see the file)\b/i;
-const FILE_PATH_RE = /(\.\/|\.\.\/|~\/|[a-z0-9_-]+\.(ts|js|tsx|jsx|json|md|py|rs|go|yaml|yml|toml|css|html)|\bpackage\.json\b|\bREADME\b)/i;
+  /\b(read|open|show|edit|write|create|update|modify|run|execute|bash|grep|find|ls|list files|cat|apply patch|check the repo|look at|see the file)\b/i;
+const FILE_PATH_RE =
+  /(\.\/|\.\.\/|~\/|[a-z0-9_-]+\.(ts|js|tsx|jsx|json|md|py|rs|go|yaml|yml|toml|css|html)|\bpackage\.json\b|\bREADME\b)/i;
 
 function looksLikeToolIntent(text) {
   const trimmed = text.trim();
@@ -49,6 +50,22 @@ export default function chatOnlyExtension(pi) {
     return names.filter((n) => all.has(n));
   }
 
+  const WEB_TOOL_PATTERN = /(web|search|fetch|browser|http)/i;
+
+  function webOnlyToolNames() {
+    return validToolNames(
+      pi
+        .getAllTools()
+        .filter((t) => WEB_TOOL_PATTERN.test(t.name))
+        .map((t) => t.name),
+    );
+  }
+
+  function chatToolNames() {
+    const web = webOnlyToolNames();
+    return web;
+  }
+
   function persist() {
     pi.appendEntry(CHAT_STATE_CUSTOM_TYPE, {
       enabled: chatModeEnabled,
@@ -58,11 +75,13 @@ export default function chatOnlyExtension(pi) {
 
   function updateStatus(ctx) {
     if (chatModeEnabled) {
-      ctx.ui.setStatus("chat-only", ctx.ui.theme.fg("accent", "💬 chat"));
-      ctx.ui.setWidget(
-        "chat-only",
-        [ctx.ui.theme.fg("muted", "Chat-only – no tools loaded. Run /tools to enable.")],
-      );
+      ctx.ui.setStatus("chat-only", ctx.ui.theme.fg("accent", "💬 chat+web"));
+      ctx.ui.setWidget("chat-only", [
+        ctx.ui.theme.fg(
+          "muted",
+          "Chat + web – files and shell off. Run /tools to enable.",
+        ),
+      ]);
     } else {
       ctx.ui.setStatus("chat-only", undefined);
       ctx.ui.setWidget("chat-only", undefined);
@@ -71,16 +90,21 @@ export default function chatOnlyExtension(pi) {
 
   function enableChatMode(ctx) {
     if (chatModeEnabled) {
-      ctx.ui.notify("Already in chat-only mode. No tools loaded.", "info");
+      ctx.ui.notify(
+        "Already in chat plus web mode. Only web lookup loaded.",
+        "info",
+      );
       return;
     }
-    // Snapshot current tools before wiping.
     toolsBeforeChat = [...pi.getActiveTools()];
-    pi.setActiveTools([]);
+    pi.setActiveTools(chatToolNames());
     chatModeEnabled = true;
     persist();
     updateStatus(ctx);
-    ctx.ui.notify("Chat-only mode enabled. Tools disabled for this session. Run /tools to re-enable.", "info");
+    ctx.ui.notify(
+      "Chat plus web enabled. File, shell, and edit tools off. Run /tools to re-enable.",
+      "info",
+    );
   }
 
   function disableChatMode(ctx) {
@@ -92,12 +116,18 @@ export default function chatOnlyExtension(pi) {
       toolsBeforeChat ?? pi.getAllTools().map((t) => t.name),
     );
     // If snapshot is empty or invalid, fall back to current getAllTools.
-    const effective = toRestore.length > 0 ? toRestore : validToolNames(pi.getAllTools().map((t) => t.name));
+    const effective =
+      toRestore.length > 0
+        ? toRestore
+        : validToolNames(pi.getAllTools().map((t) => t.name));
     pi.setActiveTools(effective);
     chatModeEnabled = false;
     persist();
     updateStatus(ctx);
-    ctx.ui.notify(`Tools enabled (${effective.length} tools). Chat-only off for this session. Run /chat to go back.`, "info");
+    ctx.ui.notify(
+      `Tools enabled (${effective.length} tools). Chat-only off for this session. Run /chat to go back.`,
+      "info",
+    );
   }
 
   function restoreFromBranch(ctx) {
@@ -114,13 +144,14 @@ export default function chatOnlyExtension(pi) {
       toolsBeforeChat = last.toolsBeforeChat;
       // Re-apply tool state to match restored flag.
       if (chatModeEnabled) {
-        // Save current active if we have no snapshot yet.
         if (!toolsBeforeChat) {
           toolsBeforeChat = [...pi.getActiveTools()];
         }
-        pi.setActiveTools([]);
+        pi.setActiveTools(chatToolNames());
       } else {
-        const toRestore = validToolNames(last.toolsBeforeChat ?? pi.getAllTools().map((t) => t.name));
+        const toRestore = validToolNames(
+          last.toolsBeforeChat ?? pi.getAllTools().map((t) => t.name),
+        );
         if (toRestore.length > 0) pi.setActiveTools(toRestore);
       }
       return true;
@@ -130,7 +161,7 @@ export default function chatOnlyExtension(pi) {
 
   // ---- Commands ----
   pi.registerCommand("chat", {
-    description: "Enter chat-only mode (disable all tools, minimal prompt)",
+    description: "Enter chat plus web mode (web lookup only, minimal prompt)",
     handler: async (_args, ctx) => {
       enableChatMode(ctx);
     },
@@ -179,15 +210,15 @@ export default function chatOnlyExtension(pi) {
     updateStatus(ctx);
   });
 
-  // Keep status in sync if something else changes tools externally.
   pi.on("turn_start", async () => {
-    // Persist so reload keeps the correct branch state.
-    // Only persist after initial setup to avoid duplicate entries on every turn when unchanged.
-    // We check last entry to dedupe is handled by appendEntry branching anyway.
     if (chatModeEnabled) {
-      // Ensure we stay with no tools if something re-enabled.
-      if (pi.getActiveTools().length !== 0) {
-        pi.setActiveTools([]);
+      const expected = chatToolNames();
+      const active = pi.getActiveTools();
+      const same =
+        active.length === expected.length &&
+        expected.every((n) => active.includes(n));
+      if (!same) {
+        pi.setActiveTools(expected);
       }
     }
   });
@@ -198,45 +229,62 @@ export default function chatOnlyExtension(pi) {
 
     // Respect user-provided --append-system-prompt if present.
     const append = event.systemPromptOptions?.appendSystemPrompt?.trim();
-    const base = append ? `${TINY_CHAT_PROMPT}\n\nAdditional instructions:\n${append}` : TINY_CHAT_PROMPT;
+    const base = append
+      ? `${TINY_CHAT_PROMPT}\n\nAdditional instructions:\n${append}`
+      : TINY_CHAT_PROMPT;
 
     return { systemPrompt: base };
   });
 
-  // ---- Context filtering (save tokens on history) ----
   pi.on("context", async (event) => {
     if (!chatModeEnabled) return;
-    // Strip historic tool artifacts when in chat-only – keep only user/assistant/custom text.
+    const webIds = new Set();
+    for (const m of event.messages) {
+      if (m.role !== "assistant" || !Array.isArray(m.content)) continue;
+      for (const b of m.content) {
+        if (b.type !== "toolCall") continue;
+        const name = b.name ?? b.toolName ?? "";
+        const id = b.id ?? b.toolCallId ?? b.toolCall?.id;
+        if (id && WEB_TOOL_PATTERN.test(name)) webIds.add(id);
+      }
+    }
     const filtered = event.messages.filter((m) => {
-      const role = m.role;
-      if (role === "toolResult") return false;
-      // Assistant toolCall blocks are inside assistant messages; we keep the message
-      // but could strip toolCall content if needed. For minimal cost, drop assistant
-      // messages that are purely tool calls without text.
-      if (role === "assistant") {
-        const content = m.content;
-        if (Array.isArray(content)) {
-          const hasText = content.some(
-            (b) => b.type === "text" && (b.text ?? "").trim(),
-          );
-          const hasOnlyToolCalls =
-            content.length > 0 && content.every((b) => b.type === "toolCall");
-          if (hasOnlyToolCalls && !hasText) return false;
-        }
+      if (m.role === "toolResult") {
+        const id = m.toolCallId ?? m.id ?? m.toolCall?.id;
+        if (id && webIds.size > 0) return webIds.has(id);
+        return true;
+      }
+      if (m.role === "assistant" && Array.isArray(m.content)) {
+        const hasText = m.content.some(
+          (b) => b.type === "text" && (b.text ?? "").trim(),
+        );
+        const webCalls = m.content.filter(
+          (b) =>
+            b.type === "toolCall" &&
+            WEB_TOOL_PATTERN.test(b.name ?? b.toolName ?? ""),
+        );
+        const otherCalls = m.content.filter(
+          (b) =>
+            b.type === "toolCall" &&
+            !WEB_TOOL_PATTERN.test(b.name ?? b.toolName ?? ""),
+        );
+        if (otherCalls.length > 0 && webCalls.length === 0 && !hasText)
+          return false;
       }
       return true;
     });
-    // Also strip toolCalls from remaining assistant content arrays to avoid sending stale schemas.
-    const cleaned = filtered.map((m) => {
-      if (m.role !== "assistant") return m;
-      const content = m.content;
-      if (!Array.isArray(content)) return m;
-      const withoutToolCalls = content.filter((b) => b.type !== "toolCall");
-      if (withoutToolCalls.length === content.length) return m;
-      // If we removed everything, drop the message (already filtered, but guard).
-      if (withoutToolCalls.length === 0) return null;
-      return { ...m, content: withoutToolCalls };
-    }).filter(Boolean);
+    const cleaned = filtered
+      .map((m) => {
+        if (m.role !== "assistant" || !Array.isArray(m.content)) return m;
+        const kept = m.content.filter((b) => {
+          if (b.type !== "toolCall") return true;
+          return WEB_TOOL_PATTERN.test(b.name ?? b.toolName ?? "");
+        });
+        if (kept.length === m.content.length) return m;
+        if (kept.length === 0) return null;
+        return { ...m, content: kept };
+      })
+      .filter(Boolean);
 
     return { messages: cleaned };
   });
