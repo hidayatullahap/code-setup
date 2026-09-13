@@ -10,14 +10,12 @@ TMP_MERGED=""
 TMP_WEB_KEYS=""       # Temp file to store web search keys from setup-web-search.sh
 SAVED_TMP_WEB_KEYS="" # Preserved path after TMP_WEB_KEYS is unset
 TMP_WEB_SCRIPT=""     # Temp copy of setup-web-search.sh when the script runs via curl | bash
-TMP_MODELS_SCRIPT=""  # Temp copy of setup-enabled-models.sh when the script runs via curl | bash
 cleanup() {
   if [ -n "$CLONE_DIR" ] && [ -d "$CLONE_DIR" ]; then rm -rf "$CLONE_DIR" 2>/dev/null || true; fi
   if [ -n "$TMP_MERGED" ]; then rm -f "$TMP_MERGED" 2>/dev/null || true; fi
   if [ -n "${TMP_WEB_KEYS:-}" ]; then rm -f "$TMP_WEB_KEYS" 2>/dev/null || true; fi
   if [ -n "${SAVED_TMP_WEB_KEYS:-}" ]; then rm -f "$SAVED_TMP_WEB_KEYS" 2>/dev/null || true; fi
   if [ -n "${TMP_WEB_SCRIPT:-}" ]; then rm -f "$TMP_WEB_SCRIPT" 2>/dev/null || true; fi
-  if [ -n "${TMP_MODELS_SCRIPT:-}" ]; then rm -f "$TMP_MODELS_SCRIPT" 2>/dev/null || true; fi
 }
 trap cleanup EXIT
 
@@ -219,24 +217,6 @@ else
       fi
     fi
   fi
-fi
-
-echo "==> Configuring enabled models..."
-if [ -f "$SCRIPT_DIR/setup-enabled-models.sh" ]; then
-  bash "$SCRIPT_DIR/setup-enabled-models.sh" || echo "Warning: setup-enabled-models.sh failed, skipping enabled models setup" >&2
-elif command -v curl >/dev/null 2>&1; then
-  RAW_MODELS_URL="$(printf '%s' "$REPO_URL" | sed 's#github\.com#raw.githubusercontent.com#; s#\.git$##')/$REPO_BRANCH/setup-enabled-models.sh"
-  echo "Downloading setup-enabled-models.sh..."
-  TMP_MODELS_SCRIPT="$(mktemp)"
-  if curl -fsSL "$RAW_MODELS_URL" -o "$TMP_MODELS_SCRIPT"; then
-    bash "$TMP_MODELS_SCRIPT" || echo "Warning: downloaded setup-enabled-models.sh failed, skipping enabled models setup" >&2
-  else
-    echo "Warning: could not download setup-enabled-models.sh, skipping enabled models setup" >&2
-    rm -f "$TMP_MODELS_SCRIPT"
-    TMP_MODELS_SCRIPT=""
-  fi
-else
-  echo "Warning: setup-enabled-models.sh not found and curl unavailable, skipping enabled models setup" >&2
 fi
 
 echo "==> Writing web search keys to config..."
