@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# install-extensions.sh — install chat-only, generate-design and kiosapi pi extensions
+# install-extensions.sh — install chat-only, generate-design, kiosapi and kucing pi extensions
 #
 # Copies extension files from the repo (or from a cloned copy) into
 # $HOME/.pi/agent/extensions/ so pi can discover them.
@@ -103,6 +103,19 @@ if [ -s "$KIOS_SRC" ]; then
 else
   echo "Warning: extensions/kiosapi/index.ts not found in source ($SRC_DIR), skipping" >&2
   echo "         Looked at: $KIOS_SRC" >&2
+fi
+
+echo "==> Installing kucing extension..."
+KUCING_SRC="$SRC_DIR/extensions/kucing"
+KUCING_DEST="$DEST_DIR/kucing"
+if [ -s "$KUCING_SRC/index.ts" ]; then
+  mkdir -p "$KUCING_DEST"
+  cp "$KUCING_SRC/index.ts" "$KUCING_DEST/index.ts"
+  cp "$KUCING_SRC/README.md" "$KUCING_DEST/README.md"
+  echo "    Installed kucing -> $KUCING_DEST/index.ts (from $KUCING_SRC)"
+else
+  echo "Warning: extensions/kucing/index.ts not found in source ($SRC_DIR), skipping" >&2
+  echo "         Looked at: $KUCING_SRC/index.ts" >&2
 fi
 
 echo "==> Extensions installed. Verify with: pi list && find \"$DEST_DIR\" -maxdepth 3"
