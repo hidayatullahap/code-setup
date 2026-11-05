@@ -1,0 +1,12 @@
+{
+  "name": "code-setup",
+  "version": "1.0.0",
+  "private": false,
+  "type": "module",
+  "bin": {
+    "code-setup": "./setup.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/setup.test.mjs"
+  }
+}

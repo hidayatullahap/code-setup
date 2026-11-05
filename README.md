@@ -1,15 +1,24 @@
-⚠️ Warning: This repo is my personal sandbox. Some of these bash scripts might do pure magic; others might `rm -rf /` your entire disk. If your curiosity nukes your machine, don't come crying to my pull requests!
+⚠️ Warning: This repo is my personal sandbox. Some of these scripts might do pure magic; others might `rm -rf /` your entire disk. If your curiosity nukes your machine, don't come crying to my pull requests!
+
+Run the full setup on Windows (PowerShell or CMD), macOS, or Linux:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup.sh | bash
+npx --yes github:hidayatullahap/code-setup
 ```
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/install-extensions.sh | bash
-```
+Run individual steps with flags:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup-git-local.sh | bash
+npx --yes github:hidayatullahap/code-setup --extensions
+npx --yes github:hidayatullahap/code-setup --git-local
+npx --yes github:hidayatullahap/code-setup --web-search
+npx --yes github:hidayatullahap/code-setup --nvim
+```
+
+Or from a local checkout:
+
+```sh
+node setup.mjs
 ```
 
 Guides:
