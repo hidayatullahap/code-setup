@@ -11,3 +11,7 @@ curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/inst
 ```sh
 curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup-git-local.sh | bash
 ```
+
+Guides:
+
+- [Add a custom model to Cloudflare AI Gateway and pi](docs/cloudflare-ai-gateway-custom-model.md)
