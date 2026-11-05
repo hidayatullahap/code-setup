@@ -10,8 +10,8 @@
  * /tools restores the previous tool set.
  *
  * Place as:
- *   ~/.pi/agent/extensions/chat-only/chat-only.js  (global)
- *   .pi/extensions/chat-only/chat-only.js          (project-local)
+ *   ~/.pi/agent/extensions/chat-only/index.js  (global)
+ *   .pi/extensions/chat-only/index.js          (project-local)
  */
 
 const CHAT_STATE_CUSTOM_TYPE = "chat-only-state";
