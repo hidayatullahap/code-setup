@@ -5,10 +5,12 @@ Setup needs `git` and Node 22.19 or newer. It works on Mac, Linux and Windows.
 Open the setup menu:
 
 ```sh
-npx github:hidayatullahap/code-setup
+npx --allow-git=root github:hidayatullahap/code-setup
 ```
 
 Use the arrow keys and space to pick what to set up, then press enter.
+
+npm 12 and newer refuse to download packages from git unless you allow it. `--allow-git=root` allows it for this command only.
 
 | Step | What it does |
 |---|---|
@@ -22,8 +24,8 @@ Use the arrow keys and space to pick what to set up, then press enter.
 To skip the menu, name the steps:
 
 ```sh
-npx github:hidayatullahap/code-setup extensions
-npx github:hidayatullahap/code-setup git-local
+npx --allow-git=root github:hidayatullahap/code-setup extensions
+npx --allow-git=root github:hidayatullahap/code-setup git-local
 ```
 
 From a local clone, run `npm install`, then `node setup/setup.mjs`. Run the tests with `npm test`.

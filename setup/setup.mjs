@@ -19,7 +19,7 @@ const STEPS = [
 ];
 const DEFAULT_STEPS = ["pi", "extensions"];
 const STEP_NAMES = STEPS.map(({ value }) => value);
-const USAGE = `Usage: npx github:hidayatullahap/code-setup [${STEP_NAMES.join(" | ")}]...`;
+const USAGE = `Usage: npx --allow-git=root github:hidayatullahap/code-setup [${STEP_NAMES.join(" | ")}]...`;
 const CANCEL_MESSAGE = "setup cancelled";
 const WINDOWS_SHELL_COMMANDS = new Set(["npm", "pi"]);
 const REPO_DIR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
