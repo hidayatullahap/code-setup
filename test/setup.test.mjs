@@ -13,14 +13,12 @@ import {
   buildWebSearchConfig,
   mergeSettings,
   parseJsonObject,
-  parseKeySelection,
   withAgentsSection,
 } from "../setup/config.mjs";
 import { runSetup } from "../setup/setup.mjs";
 
 const REPO_DIR = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const SKIP_WEB_SEARCH = "0";
-const DECLINE_GIT = "n";
+const PI_STEPS = ["pi", "extensions"];
 
 function createTempDir(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "code-setup-test-"));
@@ -28,10 +26,15 @@ function createTempDir(t) {
   return dir;
 }
 
+function createFakePrompts(answers) {
+  const remainingAnswers = [...answers];
+  const nextAnswer = async (options) => (remainingAnswers.length > 0 ? remainingAnswers.shift() : options.defaultValue);
+  return { multiselect: nextAnswer, password: nextAnswer, text: nextAnswer };
+}
+
 function createFakes({ answers = null, statusFor = () => 0 } = {}) {
   const commands = [];
   const lines = [];
-  const remainingAnswers = answers && [...answers];
   return {
     commands,
     lines,
@@ -39,13 +42,14 @@ function createFakes({ answers = null, statusFor = () => 0 } = {}) {
       commands.push([command, ...args].join(" "));
       return statusFor(command, args);
     },
-    ask: remainingAnswers && (async () => remainingAnswers.shift() ?? ""),
+    hasCommand: () => true,
+    prompts: answers && createFakePrompts(answers),
     output: { log: (line) => lines.push(line), warn: (line) => lines.push(line) },
   };
 }
 
-function setupWith(home, fakes, { step = "all", repoDir = REPO_DIR } = {}) {
-  return runSetup({ step, home, repoDir, ...fakes });
+function setupWith(home, fakes, { steps = PI_STEPS, repoDir = REPO_DIR } = {}) {
+  return runSetup({ steps, home, nvimDir: path.join(home, "nvim"), repoDir, ...fakes });
 }
 
 function agentPath(home, ...parts) {
@@ -89,19 +93,6 @@ test("parseJsonObject returns null for invalid JSON and non-objects", () => {
   assert.equal(parseJsonObject("[1]"), null);
 });
 
-test("parseKeySelection handles numbers, all, skip and invalid input", () => {
-  const [openai, , exa] = WEB_SEARCH_PROVIDERS;
-  assert.deepEqual(parseKeySelection("1, 3", WEB_SEARCH_PROVIDERS).selected, [openai, exa]);
-  assert.equal(parseKeySelection("a", WEB_SEARCH_PROVIDERS).selected.length, WEB_SEARCH_PROVIDERS.length);
-  assert.equal(parseKeySelection("", WEB_SEARCH_PROVIDERS).skip, true);
-  assert.equal(parseKeySelection("1,0", WEB_SEARCH_PROVIDERS).skip, true);
-  assert.deepEqual(parseKeySelection("1,99,x", WEB_SEARCH_PROVIDERS), {
-    skip: false,
-    selected: [openai],
-    invalid: ["99", "x"],
-  });
-});
-
 test("buildWebSearchConfig skips empty keys", () => {
   const [openai, brave] = WEB_SEARCH_PROVIDERS;
   const answers = [
@@ -111,7 +102,7 @@ test("buildWebSearchConfig skips empty keys", () => {
   assert.deepEqual(buildWebSearchConfig(answers), { openaiApiKey: "sk-1" });
 });
 
-test("full setup installs pi, config files and every extension", async (t) => {
+test("pi steps install pi, config files and every extension", async (t) => {
   const home = createTempDir(t);
   const fakes = createFakes();
   await setupWith(home, fakes);
@@ -187,26 +178,54 @@ test("invalid subagents.json and empty AGENTS.md are skipped with warnings", asy
   assert.ok(fakes.lines.some((line) => line.includes("AGENTS.md not found")));
 });
 
-test("interactive setup saves web search keys and sets git global user", async (t) => {
+test("web search step saves only the keys that were filled in", async (t) => {
   const home = createTempDir(t);
-  const fakes = createFakes({ answers: ["99", "1,2", "sk-test", "", "y", "", ""] });
+  const [openai, brave] = WEB_SEARCH_PROVIDERS;
+  const fakes = createFakes({ answers: [[openai, brave], "sk-test", ""] });
 
-  await setupWith(home, fakes);
+  await setupWith(home, fakes, { steps: ["web-search"] });
 
   assert.deepEqual(readJson(path.join(home, ".pi", "web-search.json")), { openaiApiKey: "sk-test" });
-  assert.ok(fakes.commands.includes(`git config --global user.email ${DEFAULT_GIT_EMAIL}`));
-  assert.ok(fakes.commands.includes(`git config --global user.name ${DEFAULT_GIT_NAME}`));
-  assert.ok(fakes.lines.includes("  Invalid number: 99 (ignored)"));
 });
 
-test("declining prompts writes no keys and runs no git config", async (t) => {
+test("web search step writes nothing when no provider is picked", async (t) => {
   const home = createTempDir(t);
-  const fakes = createFakes({ answers: [SKIP_WEB_SEARCH, DECLINE_GIT] });
+  const fakes = createFakes({ answers: [[]] });
 
-  await setupWith(home, fakes);
+  await setupWith(home, fakes, { steps: ["web-search"] });
 
   assert.equal(fs.existsSync(path.join(home, ".pi", "web-search.json")), false);
-  assert.equal(fakes.commands.some((command) => command.startsWith("git config")), false);
+});
+
+test("git-global step uses the default user when answers are empty", async (t) => {
+  const home = createTempDir(t);
+  const fakes = createFakes({ answers: [] });
+
+  await setupWith(home, fakes, { steps: ["git-global"] });
+
+  assert.ok(fakes.commands.includes(`git config --global user.email ${DEFAULT_GIT_EMAIL}`));
+  assert.ok(fakes.commands.includes(`git config --global user.name ${DEFAULT_GIT_NAME}`));
+});
+
+test("prompt steps are skipped without an interactive terminal", async (t) => {
+  const home = createTempDir(t);
+  const fakes = createFakes();
+
+  await setupWith(home, fakes, { steps: ["web-search", "git-global"] });
+
+  assert.equal(fs.existsSync(path.join(home, ".pi", "web-search.json")), false);
+  assert.deepEqual(fakes.commands, []);
+});
+
+test("steps run in menu order, not in the order given", async (t) => {
+  const home = createTempDir(t);
+  const fakes = createFakes();
+
+  await setupWith(home, fakes, { steps: ["extensions", "pi"] });
+
+  const piLine = fakes.lines.indexOf("==> Installing pi...");
+  const extensionsLine = fakes.lines.indexOf("==> Installing extensions...");
+  assert.ok(piLine >= 0 && piLine < extensionsLine);
 });
 
 test("failed pi install stops setup", async (t) => {
@@ -221,7 +240,7 @@ test("extensions step installs extensions only", async (t) => {
   const home = createTempDir(t);
   const fakes = createFakes();
 
-  await setupWith(home, fakes, { step: "extensions" });
+  await setupWith(home, fakes, { steps: ["extensions"] });
 
   assert.ok(fs.existsSync(agentPath(home, "extensions", "kucing", "index.ts")));
   assert.deepEqual(fakes.commands, []);
@@ -230,9 +249,9 @@ test("extensions step installs extensions only", async (t) => {
 
 test("git-local step sets the repo user", async (t) => {
   const home = createTempDir(t);
-  const fakes = createFakes({ answers: ["y", "me@example.com", "Me"] });
+  const fakes = createFakes({ answers: ["me@example.com", "Me"] });
 
-  await setupWith(home, fakes, { step: "git-local" });
+  await setupWith(home, fakes, { steps: ["git-local"] });
 
   assert.ok(fakes.commands.includes("git config --local user.email me@example.com"));
   assert.ok(fakes.commands.includes("git config --local user.name Me"));
@@ -240,8 +259,8 @@ test("git-local step sets the repo user", async (t) => {
 
 test("git-local step fails outside a git repository", async (t) => {
   const home = createTempDir(t);
-  const fakes = createFakes({ answers: ["y"], statusFor: (command, args) => (args[0] === "rev-parse" ? 128 : 0) });
+  const fakes = createFakes({ answers: [], statusFor: (command, args) => (args[0] === "rev-parse" ? 128 : 0) });
 
-  await assert.rejects(setupWith(home, fakes, { step: "git-local" }), /not inside a git repository/);
+  await assert.rejects(setupWith(home, fakes, { steps: ["git-local"] }), /not inside a git repository/);
   assert.equal(fakes.commands.some((command) => command.startsWith("git config")), false);
 });

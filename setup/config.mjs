@@ -25,23 +25,18 @@ export const VISION_CONFIG = {
 export const LEGACY_CHAT_ONLY_FILE = "chat-only.js";
 
 export const WEB_SEARCH_PROVIDERS = [
-  { id: "openai", label: "OpenAI API Key  | sk-...", jsonKey: "openaiApiKey" },
-  { id: "brave", label: "Brave API Key    | BSA_...", jsonKey: "braveApiKey" },
-  { id: "exa", label: "Exa API Key      | exa-...", jsonKey: "exaApiKey" },
-  { id: "tinyfish", label: "TinyFish API Key | sk-tinyfish-...", jsonKey: "tinyfishApiKey" },
-  { id: "search1api", label: "Search1API Key   | ...", jsonKey: "search1apiApiKey" },
-  { id: "searchinfinity", label: "SearchInfinity   | ...", jsonKey: "searchinfinityApiKey" },
-  { id: "querit", label: "Querit API Key   | ...", jsonKey: "queritApiKey" },
-  { id: "jina", label: "Jina API Key     | jina_...", jsonKey: "jinaApiKey" },
-  { id: "bocha", label: "Bocha API Key    | sk-...", jsonKey: "bochaApiKey" },
-  { id: "perplexity", label: "Perplexity Key   | pplx-...", jsonKey: "perplexityApiKey" },
-  { id: "gemini", label: "Gemini API Key   | AIza...", jsonKey: "geminiApiKey" },
+  { label: "OpenAI", hint: "sk-...", jsonKey: "openaiApiKey" },
+  { label: "Brave", hint: "BSA_...", jsonKey: "braveApiKey" },
+  { label: "Exa", hint: "exa-...", jsonKey: "exaApiKey" },
+  { label: "TinyFish", hint: "sk-tinyfish-...", jsonKey: "tinyfishApiKey" },
+  { label: "Search1API", jsonKey: "search1apiApiKey" },
+  { label: "SearchInfinity", jsonKey: "searchinfinityApiKey" },
+  { label: "Querit", jsonKey: "queritApiKey" },
+  { label: "Jina", hint: "jina_...", jsonKey: "jinaApiKey" },
+  { label: "Bocha", hint: "sk-...", jsonKey: "bochaApiKey" },
+  { label: "Perplexity", hint: "pplx-...", jsonKey: "perplexityApiKey" },
+  { label: "Gemini", hint: "AIza...", jsonKey: "geminiApiKey" },
 ];
-
-const SELECT_ALL_ANSWERS = ["a", "A"];
-const SKIP_ANSWER = "0";
-const YES_ANSWERS = ["y", "yes"];
-const WHOLE_NUMBER = /^\d+$/;
 
 function isPlainObject(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -71,24 +66,6 @@ export function withAgentsSection(existingText, agentsText) {
   return `${existingText}\n${AGENTS_MARKER}\n${agentsText}`;
 }
 
-export function parseKeySelection(choice, providers) {
-  const trimmed = choice.trim();
-  if (SELECT_ALL_ANSWERS.includes(trimmed)) return { skip: false, selected: [...providers], invalid: [] };
-  if (trimmed === "") return { skip: true, selected: [], invalid: [] };
-
-  const numbers = trimmed.split(",").map((part) => part.trim());
-  if (numbers.includes(SKIP_ANSWER)) return { skip: true, selected: [], invalid: [] };
-
-  const selected = [];
-  const invalid = [];
-  for (const number of numbers) {
-    const provider = providers[Number(number) - 1];
-    if (WHOLE_NUMBER.test(number) && provider) selected.push(provider);
-    else invalid.push(number);
-  }
-  return { skip: false, selected, invalid };
-}
-
 export function buildWebSearchConfig(answers) {
   const config = {};
   for (const { provider, key } of answers) {
@@ -98,6 +75,7 @@ export function buildWebSearchConfig(answers) {
   return config;
 }
 
-export function isYes(answer) {
-  return YES_ANSWERS.includes(answer.trim().toLowerCase());
+export function runRequired(runCommand, command, args) {
+  const status = runCommand(command, args);
+  if (status !== 0) throw new Error(`${command} ${args.join(" ")} failed with exit code ${status}`);
 }

@@ -17,26 +17,8 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Run tests
-        run: node --test test/setup.test.mjs
-
-  starters:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Check setup.sh with shellcheck
-        run: shellcheck --shell=sh setup.sh
-
-      - name: Check setup.sh syntax with dash
-        run: dash -n setup.sh
-
-      - name: Check setup.ps1 syntax
-        shell: pwsh
-        run: |
-          $parseErrors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile("$PWD/setup.ps1", [ref]$null, [ref]$parseErrors) | Out-Null
-          if ($parseErrors.Count -gt 0) {
-            $parseErrors | ForEach-Object { Write-Error $_.Message }
-            exit 1
-          }
+        run: npm test

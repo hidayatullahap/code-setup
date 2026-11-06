@@ -1,38 +1,32 @@
-⚠️ Warning: This repo is my personal sandbox. Some of these bash scripts might do pure magic; others might `rm -rf /` your entire disk. If your curiosity nukes your machine, don't come crying to my pull requests!
+⚠️ Warning: This repo is my personal sandbox. Some of these scripts might do pure magic; others might `rm -rf /` your entire disk. If your curiosity nukes your machine, don't come crying to my pull requests!
 
-Setup needs `git` and Node 22.19 or newer.
+Setup needs `git` and Node 22.19 or newer. It works on Mac, Linux and Windows.
 
-Full setup:
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup.sh | sh
-```
-
-```powershell
-irm https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup.ps1 | iex
-```
-
-Install extensions only:
+Open the setup menu:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup.sh | sh -s -- extensions
+npx github:hidayatullahap/code-setup
 ```
 
-```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup.ps1))) extensions
-```
+Use the arrow keys and space to pick what to set up, then press enter.
 
-Set the git user for the current repo (run inside the repo):
+| Step | What it does |
+|---|---|
+| `web-search` | Saves web search API keys to `~/.pi/web-search.json` |
+| `git-global` | Sets your global git email and name |
+| `pi` | Installs pi and its plugins, vision config, `AGENTS.md` and subagent settings |
+| `extensions` | Copies the pi extensions in `extensions/` |
+| `git-local` | Sets the git email and name for the repo you are in |
+| `nvim` | Installs Neovim, language servers and the config in `nvim/init.lua` |
+
+To skip the menu, name the steps:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup.sh | sh -s -- git-local
+npx github:hidayatullahap/code-setup extensions
+npx github:hidayatullahap/code-setup git-local
 ```
 
-```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/hidayatullahap/code-setup/main/setup.ps1))) git-local
-```
-
-From a local clone, run `node setup/setup.mjs [extensions | git-local]`. Run the tests with `node --test test/setup.test.mjs`.
+From a local clone, run `npm install`, then `node setup/setup.mjs`. Run the tests with `npm test`.
 
 Guides:
 
